@@ -1,7 +1,0 @@
-{
-  "tool_name": "Bash",
-  "tool_input_preview": "{\"command\":\"cd \\\"C:/Users/khalo/Desktop/Project/ai-history\\\" && node -e \\\"\\nconst fs=require('fs');const f='test/run-tests.mjs';let s=fs.readFileSync(f,'utf-8');\\nconst a='\\\\`ctx=\\\\${/## Working on/.t...",
-  "error": "Exit code 1\nMISSING",
-  "timestamp": "2026-10-09T23:14:54.959Z",
-  "retry_count": 1
-}

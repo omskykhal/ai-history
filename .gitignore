@@ -15,3 +15,7 @@
 node_modules/
 *.tmp
 *.bak.*
+
+# OMC / editor runtime state
+/.omc/
+/.claude/
