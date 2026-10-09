@@ -1,0 +1,17 @@
+# per-machine configuration and runtime data (never commit)
+/ROOT
+/LANG
+/ALIASES
+/NO_BLOCK
+/NO_BLOCK_CODEX
+/DUMP_INPUTS
+/DUMP_INPUTS_CODEX
+/NESTED_MARKERS
+/NESTED_MARKERS_CODEX
+/state/
+/dumps/
+/backup/
+/.ai-history/
+node_modules/
+*.tmp
+*.bak.*

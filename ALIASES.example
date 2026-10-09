@@ -1,0 +1,8 @@
+# ai-history alias table. Copy this file to `ALIASES` (same folder) and edit.
+# Format: phrase1|phrase2|... => path relative to ROOT   (one target per line, # = comment)
+# Rules: case-insensitive, word boundaries, longest phrase wins; separators may be space, dot or hyphen.
+# Example: saying "shop backend, continue" anchors the session to <ROOT>\shop\backend.
+myapp|my app|마이앱 => myapp
+shop backend|backend|백엔드 => shop\backend
+shop web|frontend|프론트 => shop\web
+ai-history|ai history|히스토리 훅 => ai-history

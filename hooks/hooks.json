@@ -1,0 +1,20 @@
+{
+  "description": "ai-history: per-project work history shared by Claude Code and Codex (plugin mode, experimental). Set AUTO_HISTORY_ROOT (and optionally AUTO_HISTORY_LANG) in your environment; conf/state live in CLAUDE_PLUGIN_DATA.",
+  "hooks": {
+    "SessionStart": [
+      { "matcher": "startup|resume|clear|fork", "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/session-start.mjs\"", "timeout": 5 }] }
+    ],
+    "UserPromptSubmit": [
+      { "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/prompt-submit.mjs\"", "timeout": 3 }] }
+    ],
+    "PreToolUse": [
+      { "matcher": "*", "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/pre-tool.mjs\"", "timeout": 3 }] }
+    ],
+    "PostToolUse": [
+      { "matcher": "*", "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/post-tool.mjs\"", "timeout": 3 }] }
+    ],
+    "Stop": [
+      { "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/stop.mjs\"", "timeout": 5 }] }
+    ]
+  }
+}

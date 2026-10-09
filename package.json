@@ -1,0 +1,35 @@
+{
+  "name": "ai-history",
+  "version": "0.1.0",
+  "description": "One shared, human-readable work history per project for Claude Code and OpenAI Codex, written automatically by hooks.",
+  "type": "module",
+  "private": true,
+  "author": {
+    "name": "Yang",
+    "email": "omskykhal@gmail.com"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/<owner>/ai-history.git"
+  },
+  "keywords": [
+    "claude-code",
+    "claude-code-hooks",
+    "claude-code-plugin",
+    "codex",
+    "codex-cli",
+    "hooks",
+    "session-memory",
+    "persistent-memory",
+    "markdown"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node test/run-tests.mjs",
+    "install-hooks": "node install.mjs --install",
+    "status": "node install.mjs --status"
+  }
+}
