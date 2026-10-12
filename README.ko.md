@@ -24,7 +24,7 @@
 ## 설치 (권장: 설치 스크립트)
 
 ```bash
-git clone https://github.com/<owner>/ai-history.git
+git clone https://github.com/omskykhal/ai-history.git
 cd ai-history
 # 1) 프로젝트들이 모여 있는 상위 폴더 지정 + 주입 문구 언어 선택
 node install.mjs --install --root "C:\Users\me\Desktop\Project" --lang ko

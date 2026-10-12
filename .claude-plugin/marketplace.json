@@ -4,7 +4,7 @@
   "plugins": [
     {
       "name": "ai-history",
-      "source": { "source": "github", "repo": "<owner>/ai-history" },
+      "source": { "source": "github", "repo": "omskykhal/ai-history" },
       "description": "One shared, human-readable work history per project for Claude Code and OpenAI Codex, written automatically by hooks.",
       "version": "0.1.0",
       "category": "productivity",

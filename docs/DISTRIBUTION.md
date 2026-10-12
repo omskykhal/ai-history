@@ -1,11 +1,11 @@
 # 배포 가이드 / Distribution guide
 
-작성: 2026-10-10. 이 문서는 저장소 소유자(Yang)용 체크리스트와 복붙용 공지 문구입니다. `<owner>` 는 GitHub 계정명으로 바꾸세요(README.md·README.ko.md·package.json·.claude-plugin/plugin.json·.claude-plugin/marketplace.json 에도 같은 자리표시자가 있습니다).
+작성: 2026-10-10. 이 문서는 저장소 소유자(Yang)용 체크리스트와 복붙용 공지 문구입니다. `omskykhal` 는 GitHub 계정명으로 바꾸세요(README.md·README.ko.md·package.json·.claude-plugin/plugin.json·.claude-plugin/marketplace.json 에도 같은 자리표시자가 있습니다).
 
 ## 1. 배포 전 할 일 (순서대로)
 
 1. **이름 확정**: `ai-history`. 2026-10-10 검색에서 같은 이름의 Claude/Codex 훅 저장소는 찾지 못했지만 GitHub 전체 중복 확인은 하지 않았습니다. GitHub 에서 `ai-history` 를 한 번 검색해 보고, 겹치면 `ai-history-hooks` 같은 이름으로 바꾸세요. 플러그인 이름은 `claude-`·`anthropic-` 으로 시작하면 안 됩니다(공식 문서 규칙).
-2. **자리표시자 치환**: 위 5개 파일의 `<owner>`.
+2. **자리표시자 치환**: 위 5개 파일의 `omskykhal`.
 3. **플러그인 매니페스트 검증**(Claude Code 설치 환경에서):
    ```
    claude plugin validate .
@@ -20,7 +20,7 @@
 | 채널 | 왜 | 어떻게 | 확인 상태 |
 |---|---|---|---|
 | **GitHub 저장소** (필수) | 모든 설치 경로의 출발점(`git clone`, 마켓플레이스 `github` 소스) | 공개 저장소 + Release 태그 + Topics: `claude-code`, `claude-code-hooks`, `claude-code-plugin`, `codex-cli`, `openai-codex`, `developer-tools` | 일반 절차 |
-| **Claude Code 자체 마켓플레이스** | 사용자가 `/plugin marketplace add <owner>/ai-history` 한 줄로 설치 | 이 저장소의 `.claude-plugin/marketplace.json` 이 이미 마켓플레이스 정의. 설치 명령: `/plugin marketplace add <owner>/ai-history` 후 `/plugin install ai-history@ai-history-marketplace` | 형식은 공식 문서로 확인. 플러그인 모드 자체는 **미검증(실험)** |
+| **Claude Code 자체 마켓플레이스** | 사용자가 `/plugin marketplace add omskykhal/ai-history` 한 줄로 설치 | 이 저장소의 `.claude-plugin/marketplace.json` 이 이미 마켓플레이스 정의. 설치 명령: `/plugin marketplace add omskykhal/ai-history` 후 `/plugin install ai-history@ai-history-marketplace` | 형식은 공식 문서로 확인. 플러그인 모드 자체는 **미검증(실험)** |
 | **Anthropic 공식 마켓플레이스 등재** | 노출 | 등재 신청 절차는 **확인하지 못했습니다**(공식 문서에서 제출 방법을 찾지 못함). 필요하면 `code.claude.com/docs/en/plugins/publish` 를 먼저 읽으세요 | 미확인 |
 | **awesome 목록 PR** | 발견성 | 검색에서 확인된 목록: `rohitg00/awesome-claude-code-toolkit`(176+ 플러그인 수록). 그 외 "awesome-claude-code" 류 목록은 각 README 의 기여 규칙을 읽고 PR | 목록 존재만 확인 |
 | **커뮤니티 글** | 사용자 유입 | Reddit `r/ClaudeAI`, `r/ChatGPTCoding`; X/Twitter; GitHub Discussions(anthropics/claude-code, openai/codex 는 Discussions 가 열려 있는지 올리기 전에 확인) | 게시 규칙 미확인 |
@@ -38,13 +38,13 @@
 EN:
 ```
 I built ai-history: Claude Code + OpenAI Codex write ONE markdown work history per project (every tool call + a STATUS.md), and the next session — from either agent — starts with a [Status] report. No LLM calls, no DB, just hooks + markdown. MIT.
-https://github.com/<owner>/ai-history
+https://github.com/omskykhal/ai-history
 ```
 
 KO:
 ```
 ai-history 공개합니다. Claude Code 와 Codex 가 프로젝트마다 하나의 마크다운 히스토리(도구 호출 전부 + STATUS.md)를 자동으로 같이 쓰고, 다음 세션은 어느 쪽에서 열어도 [현황] 보고로 시작합니다. LLM 호출·DB 없음, 훅+마크다운뿐. MIT.
-https://github.com/<owner>/ai-history
+https://github.com/omskykhal/ai-history
 ```
 
 ### 3-3. 긴 공지 (Reddit / Discussions / 블로그)
@@ -67,7 +67,7 @@ Install: git clone, then `node install.mjs --install --root <your projects folde
 Limits (honest): tested on Windows only; macOS/Linux path code exists but is untested. Logs don't rotate. A Claude Code plugin manifest is included but plugin mode is experimental.
 
 MIT. Feedback welcome, especially from macOS/Linux users.
-https://github.com/<owner>/ai-history
+https://github.com/omskykhal/ai-history
 ```
 
 KO:
@@ -88,7 +88,7 @@ ai-history — Claude Code 와 Codex 가 프로젝트마다 하나의 작업 히
 한계(솔직하게): Windows 에서만 검증. macOS/Linux 경로 코드는 있지만 미검증. 로그 회전 없음. Claude Code 플러그인 매니페스트는 들어 있지만 플러그인 모드는 실험 단계.
 
 MIT. 특히 macOS/Linux 사용자의 피드백을 기다립니다.
-https://github.com/<owner>/ai-history
+https://github.com/omskykhal/ai-history
 ```
 
 ### 3-4. Release v0.1.0 노트

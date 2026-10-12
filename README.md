@@ -24,7 +24,7 @@ Close the laptop mid-task, come back tomorrow, open Claude Code *or* Codex from 
 ## Install (recommended: installer script)
 
 ```bash
-git clone https://github.com/<owner>/ai-history.git
+git clone https://github.com/omskykhal/ai-history.git
 cd ai-history
 # 1) point it at the folder that holds all your projects, choose the language of the injected instructions
 node install.mjs --install --root "C:\Users\me\Projects" --lang en

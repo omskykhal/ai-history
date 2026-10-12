@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "description": "One shared, human-readable work history per project for Claude Code and OpenAI Codex, written automatically by hooks.",
   "author": { "name": "Yang", "email": "omskykhal@gmail.com" },
-  "repository": "https://github.com/<owner>/ai-history",
+  "repository": "https://github.com/omskykhal/ai-history",
   "license": "MIT",
   "keywords": ["hooks", "session-memory", "history", "codex", "markdown"]
 }
