@@ -128,7 +128,9 @@ Aliases are matched on word boundaries, case-insensitively, longest phrase first
 
 ## Claude Code plugin mode (experimental)
 
-The repo also carries `.claude-plugin/plugin.json` and `hooks/hooks.json`, so it can be loaded with `claude --plugin-dir ./ai-history` or published through a marketplace. In plugin mode the conf dir is `CLAUDE_PLUGIN_DATA`, so set `AUTO_HISTORY_ROOT` (and optionally `AUTO_HISTORY_LANG`) as environment variables instead of the `ROOT`/`LANG` files. Codex still needs `install.mjs --codex-hooks`. This path is **not yet tested** end to end; the installer path above is.
+The repo also carries `.claude-plugin/plugin.json` and `hooks/hooks.json`, so it can be loaded with `claude --plugin-dir ./ai-history` or installed from the marketplace (`/plugin install ai-history --marketplace omskykhal/ai-history`). In plugin mode the conf dir is `CLAUDE_PLUGIN_DATA`, so set `AUTO_HISTORY_ROOT` (and optionally `AUTO_HISTORY_LANG`) as environment variables instead of the `ROOT`/`LANG` files. Codex still needs `install.mjs --codex-hooks`.
+
+Status: verified once on Windows with `claude --plugin-dir` (2026-10-12: `.ai-history/`, daily log and `STATUS.md` written, status block requested). The marketplace install uses the same loading path but was not tested separately. Do not combine plugin mode with `install.mjs --install` on the same machine: both sets of hooks would run and every log line would be written twice.
 
 ## Tests
 

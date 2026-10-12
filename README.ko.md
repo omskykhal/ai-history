@@ -128,7 +128,9 @@ API 키처럼 보이는 문자열(`AIza…`, `sk-…`, `ghp_…`, `Bearer …`, 
 
 ## Claude Code 플러그인 모드(실험)
 
-저장소에 `.claude-plugin/plugin.json` 과 `hooks/hooks.json` 이 들어 있어 `claude --plugin-dir ./ai-history` 로 띄우거나 마켓플레이스로 배포할 수 있습니다. 플러그인 모드에서는 설정 폴더가 `CLAUDE_PLUGIN_DATA` 이므로 `ROOT`/`LANG` 파일 대신 환경변수 `AUTO_HISTORY_ROOT`(선택 `AUTO_HISTORY_LANG`)를 씁니다. Codex 는 여전히 `install.mjs --codex-hooks` 가 필요합니다. 이 경로는 **끝까지 시험하지 않았습니다**. 위의 설치 스크립트 경로는 시험됐습니다.
+저장소에 `.claude-plugin/plugin.json` 과 `hooks/hooks.json` 이 들어 있어 `claude --plugin-dir ./ai-history` 로 띄우거나 마켓플레이스에서 설치(`/plugin install ai-history --marketplace omskykhal/ai-history`)할 수 있습니다. 플러그인 모드에서는 설정 폴더가 `CLAUDE_PLUGIN_DATA` 이므로 `ROOT`/`LANG` 파일 대신 환경변수 `AUTO_HISTORY_ROOT`(선택 `AUTO_HISTORY_LANG`)를 씁니다. Codex 는 여전히 `install.mjs --codex-hooks` 가 필요합니다.
+
+상태: Windows 에서 `claude --plugin-dir` 로 1회 확인(2026-10-12: `.ai-history/`·날짜 로그·`STATUS.md` 생성, 상태 블록 요구 동작). 마켓플레이스 설치는 같은 로딩 경로지만 따로 시험하지 않았습니다. 같은 PC 에서 플러그인 모드와 `install.mjs --install` 을 함께 쓰지 마세요. 훅이 두 벌 돌아 모든 로그 줄이 두 번씩 기록됩니다.
 
 ## 시험
 
