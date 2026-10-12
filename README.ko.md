@@ -21,7 +21,13 @@
 | OpenAI Codex CLI | 0.160 이상, `hooks` 사용 가능(`codex features list` → `hooks stable true`), 선택 |
 | OS | **Windows**(검증됨). macOS/Linux: 경로 처리는 구현돼 있으나 **미검증** |
 
-## 설치 (권장: 설치 스크립트)
+## 설치
+
+**Claude Code 플러그인(한 줄, Claude Code 2.1.275 이상)** — Claude 쪽만 설치되고, 플러그인 모드는 실험 단계(아래 참고):
+
+
+
+**설치 스크립트(권장, Claude Code 와 Codex 모두)**
 
 ```bash
 git clone https://github.com/omskykhal/ai-history.git

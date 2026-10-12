@@ -18,5 +18,6 @@
         "codex"
       ]
     }
-  ]
+  ],
+  "description": "Plugins by Yang: ai-history, a shared per-project work history for Claude Code and OpenAI Codex."
 }

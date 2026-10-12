@@ -21,7 +21,13 @@ Close the laptop mid-task, come back tomorrow, open Claude Code *or* Codex from 
 | OpenAI Codex CLI | 0.160 or newer with `hooks` enabled (`codex features list` → `hooks stable true`), optional |
 | OS | **Windows** (tested). macOS/Linux: path handling is implemented but **untested** |
 
-## Install (recommended: installer script)
+## Install
+
+**Claude Code plugin (one line, Claude Code 2.1.275+)** — Claude Code side only; plugin mode is experimental, see below:
+
+
+
+**Installer script (recommended, covers Claude Code and Codex)**
 
 ```bash
 git clone https://github.com/omskykhal/ai-history.git
