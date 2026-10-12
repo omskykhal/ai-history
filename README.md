@@ -25,7 +25,9 @@ Close the laptop mid-task, come back tomorrow, open Claude Code *or* Codex from 
 
 **Claude Code plugin (one line, Claude Code 2.1.275+)** — Claude Code side only; plugin mode is experimental, see below:
 
-
+```
+/plugin install ai-history --marketplace omskykhal/ai-history
+```
 
 **Installer script (recommended, covers Claude Code and Codex)**
 

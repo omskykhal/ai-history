@@ -25,7 +25,9 @@
 
 **Claude Code 플러그인(한 줄, Claude Code 2.1.275 이상)** — Claude 쪽만 설치되고, 플러그인 모드는 실험 단계(아래 참고):
 
-
+```
+/plugin install ai-history --marketplace omskykhal/ai-history
+```
 
 **설치 스크립트(권장, Claude Code 와 Codex 모두)**
 
