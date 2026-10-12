@@ -551,6 +551,7 @@ export function otherSessionsBody(anchor, env = process.env, currentSid8 = null,
 export const RETENTION_DEFAULT = { keep: 30, archive: 365, sessions: 7 };
 export const RETENTION_INTERVAL_MS = 24 * 60 * 60 * 1000;
 export const RETENTION_BATCH_MAX = 20;
+export const RETENTION_TIME_BUDGET_MS = 800;
 export const RETENTION_MARKER = '.retention';
 export const ARCHIVE_DIRNAME = 'archive';
 export function retentionPolicy(env = process.env) {
@@ -584,16 +585,22 @@ export function runRetention(anchor, env = process.env, opts = {}) {
     const now = typeof opts.now === 'number' ? opts.now : Date.now();
     const marker = path.join(hdir, RETENTION_MARKER);
     if (!opts.force) {
-      try { if (now - fs.statSync(marker).mtimeMs < RETENTION_INTERVAL_MS) return res; } catch { /* no marker → run */ }
+      try { const age = now - fs.statSync(marker).mtimeMs; if (age >= 0 && age < RETENTION_INTERVAL_MS) return res; } catch { /* no marker → run */ }
     }
     res.ran = true;
     const pol = retentionPolicy(env);
+    // archive counts days since the log's own date, so it must exceed keep (otherwise a log would be deleted right after being archived)
+    const archiveDays = pol.archive > 0 ? Math.max(pol.archive, pol.keep + 1) : 0;
+    const t0 = Date.now();
+    const timeBudget = typeof opts.timeBudgetMs === 'number' ? opts.timeBudgetMs : RETENTION_TIME_BUDGET_MS;
+    let interrupted = false;
     const protectedNames = new Set([`${ymd(new Date(now))}.md`, `${ymd(new Date(now - 86400000))}.md`]);
     const adir = path.join(hdir, ARCHIVE_DIRNAME);
     if (pol.keep > 0) {
       let budget = RETENTION_BATCH_MAX;
       for (const n of fs.readdirSync(hdir).sort()) {
         if (budget <= 0) break;
+        if (Date.now() - t0 > timeBudget) { interrupted = true; break; }
         const m = LOG_NAME_RE.exec(n);
         if (!m || protectedNames.has(n)) continue;
         if (ageDays(m[1], m[2], m[3], now) <= pol.keep) continue;
@@ -602,17 +609,27 @@ export function runRetention(anchor, env = process.env, opts = {}) {
         try {
           const raw = fs.readFileSync(src);
           fs.mkdirSync(adir, { recursive: true });
-          if (!fs.existsSync(dst)) writeAtomic(dst, zlib.gzipSync(raw));
-          const back = zlib.gunzipSync(fs.readFileSync(dst));
+          let target = dst;
+          if (fs.existsSync(dst) && !zlib.gunzipSync(fs.readFileSync(dst)).equals(raw)) {
+            // a different .gz already carries this name → archive under a distinct name instead of retrying forever
+            target = path.join(adir, `${n}.dup-${Date.now()}.gz`);
+            warn(`retention: archive name clash, writing ${path.basename(target)}`);
+          }
+          if (!fs.existsSync(target)) writeAtomic(target, zlib.gzipSync(raw));
+          const back = zlib.gunzipSync(fs.readFileSync(target));
           if (back.equals(raw)) { fs.unlinkSync(src); res.archived += 1; budget -= 1; }
-          else warn(`retention: archive mismatch, kept ${n}`);
-        } catch (e) { warn(`retention: ${n} ${e.message}`); }
+          else { budget -= 1; warn(`retention: archive mismatch, kept ${n}`); }
+        } catch (e) { budget -= 1; warn(`retention: ${n} ${e.message}`); }
       }
-      if (pol.archive > 0 && fs.existsSync(adir)) {
+      if (archiveDays > 0 && fs.existsSync(adir)) {
         for (const n of fs.readdirSync(adir)) {
           const m = GZ_NAME_RE.exec(n);
-          if (!m || ageDays(m[1], m[2], m[3], now) <= pol.archive) continue;
-          try { fs.unlinkSync(path.join(adir, n)); res.deleted += 1; } catch { /* ignore */ }
+          if (!m || ageDays(m[1], m[2], m[3], now) <= archiveDays) continue;
+          // a .gz also has to have existed for (archive - keep) days (its mtime), so nothing is deleted right after being archived
+          try {
+            if (now - fs.statSync(path.join(adir, n)).mtimeMs < (archiveDays - pol.keep) * 86400000) continue;
+            fs.unlinkSync(path.join(adir, n)); res.deleted += 1;
+          } catch { /* ignore */ }
         }
       }
     }
@@ -628,7 +645,9 @@ export function runRetention(anchor, env = process.env, opts = {}) {
         }
       }
     }
-    try { fs.writeFileSync(marker, new Date(now).toISOString()); } catch { /* ignore */ }
+    // interrupted by the time budget → no marker, so the next run continues where this one stopped
+    if (!interrupted) { try { fs.writeFileSync(marker, new Date(now).toISOString()); } catch { /* ignore */ } }
+    res.interrupted = interrupted;
   } catch (e) {
     warn(`retention failed: ${e.message}`);
   }

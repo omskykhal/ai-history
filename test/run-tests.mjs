@@ -1235,7 +1235,7 @@ async function main() {
       const mk = (days, body) => fs.writeFileSync(path.join(h, `${dstr(days)}.md`), body);
       mk(0, '- today\n'); mk(1, '- yday\n'); mk(5, '- d5\n'); mk(10, '- d10\n'); mk(11, '- d11 old\n'); mk(40, '- d40 old\n'.repeat(500));
       fs.writeFileSync(path.join(h, 'STATUS.md'), '# STATUS\n세션: aaaaaaaa\n');
-      fs.writeFileSync(path.join(h, 'archive', `${dstr(101)}.md.gz`), zlib.gzipSync('old'));
+      fs.writeFileSync(path.join(h, 'archive', `${dstr(101)}.md.gz`), zlib.gzipSync('old')); setOld(path.join(h, 'archive', `${dstr(101)}.md.gz`), 91);
       fs.writeFileSync(path.join(h, 'archive', `${dstr(99)}.md.gz`), zlib.gzipSync('keep'));
       fs.writeFileSync(path.join(h, 'sessions', 'claude-11111111.md'), '# STATUS\n세션: 11111111\n'); setOld(path.join(h, 'sessions', 'claude-11111111.md'), 4);
       fs.writeFileSync(path.join(h, 'sessions', 'claude-22222222.md'), '# STATUS\n세션: 22222222\n');
@@ -1284,8 +1284,10 @@ async function main() {
       fs.writeFileSync(path.join(h, `${dstr(50)}.md`), 'real'); fs.writeFileSync(path.join(h, 'archive', `${dstr(50)}.md.gz`), zlib.gzipSync('different'));
       const r = C.runRetention(a, { AUTO_HISTORY_CONF_DIR: CONF_RET }, { force: true });
       const gzBack = zlib.gunzipSync(fs.readFileSync(path.join(h, 'archive', `${dstr(50)}.md.gz`))).toString();
-      rec(10, '(e) gz 충돌(내용 불일치) → 원본 보존', 'archived=0·원본 존재·gz 원래 내용', `r=${JSON.stringify(r)} src=${fs.existsSync(path.join(h, `${dstr(50)}.md`))} gz=${gzBack}`,
-        r.archived === 0 && fs.existsSync(path.join(h, `${dstr(50)}.md`)) && gzBack === 'different');
+      const dup = fs.readdirSync(path.join(h, 'archive')).find((x) => x.startsWith(`${dstr(50)}.md.dup-`));
+      const dupBack = dup ? zlib.gunzipSync(fs.readFileSync(path.join(h, 'archive', dup))).toString() : '';
+      rec(10, '(e) gz 충돌(내용 불일치) → .dup- 이름으로 보관·기존 gz 불변', 'archived=1·원본 삭제·기존 gz 내용 유지·dup gz=real', `r=${JSON.stringify(r)} src=${fs.existsSync(path.join(h, `${dstr(50)}.md`))} gz=${gzBack} dup=${dup} dupBack=${dupBack}`,
+        r.archived === 1 && !fs.existsSync(path.join(h, `${dstr(50)}.md`)) && gzBack === 'different' && !!dup && dupBack === 'real');
     }
     // (f) 1회 상한 20개
     {
@@ -1423,6 +1425,49 @@ async function main() {
         `c1=${c1.status} f1=${JSON.stringify(f1)} c2=${c2.status} pol=${JSON.stringify(pol)} bad=${bad.status} status=${JSON.stringify(stt.retention)} src=${stt.retentionSource} dry=${dry.status} afterDry=${JSON.stringify(polAfterDry)}`,
         c1.status === 0 && f1 === 'keep=60\narchive=365\nsessions=7\n' && c2.status === 0 && JSON.stringify(pol) === '{"keep":60,"archive":0,"sessions":7}'
         && bad.status === 1 && JSON.stringify(stt.retention) === JSON.stringify(pol) && stt.retentionSource === 'RETENTION file (+env)' && dry.status === 0 && JSON.stringify(polAfterDry) === JSON.stringify(pol));
+    }
+    // (s) 리뷰 반영: archive<=keep 이면 keep+1 로 올려 압축 직후 삭제 금지 / 불일치 파일도 budget 차감 / 시간 예산 초과 시 중단·마커 없음 / 마커 mtime 이 미래면 재실행
+    {
+      const a = P('r16s'); const h = path.join(a, HD); fs.mkdirSync(path.join(h, 'archive'), { recursive: true });
+      fs.writeFileSync(path.join(h, `${dstr(40)}.md`), '- d40\n');
+      const r1 = C.runRetention(a, { AUTO_HISTORY_CONF_DIR: CONF_RET, AUTO_HISTORY_KEEP_DAYS: '10', AUTO_HISTORY_ARCHIVE_DAYS: '10' }, { force: true });
+      const gzKept = fs.existsSync(path.join(h, 'archive', `${dstr(40)}.md.gz`));
+      // 불일치 20개(더 오래된 날짜) + 정상 1개 → budget 20 이 불일치에 다 소모되어 정상 파일은 다음 실행으로 넘어감
+      const b = P('r16s2'); const hb = path.join(b, HD); fs.mkdirSync(path.join(hb, 'archive'), { recursive: true });
+      for (let i = 0; i < 20; i++) { fs.writeFileSync(path.join(hb, `${dstr(50 + i)}.md`), 'real'); fs.writeFileSync(path.join(hb, 'archive', `${dstr(50 + i)}.md.gz`), zlib.gzipSync('other')); }
+      fs.writeFileSync(path.join(hb, `${dstr(40)}.md`), 'good');
+      const r2 = C.runRetention(b, { AUTO_HISTORY_CONF_DIR: CONF_RET }, { force: true });
+      const goodLeft = fs.existsSync(path.join(hb, `${dstr(40)}.md`));
+      const dups = fs.readdirSync(path.join(hb, 'archive')).filter((x) => x.includes('.md.dup-') && x.endsWith('.gz')).length;
+      const r2b = C.runRetention(b, { AUTO_HISTORY_CONF_DIR: CONF_RET }, { force: true });
+      // 시간 예산 0ms → 첫 파일 전에 중단, 마커 없음, interrupted=true
+      const c = P('r16s3'); const hc = path.join(c, HD); fs.mkdirSync(hc, { recursive: true });
+      fs.writeFileSync(path.join(hc, `${dstr(50)}.md`), 'x');
+      const r3 = C.runRetention(c, { AUTO_HISTORY_CONF_DIR: CONF_RET }, { force: true, timeBudgetMs: -1 });
+      const marker3 = fs.existsSync(path.join(hc, '.retention'));
+      const r3b = C.runRetention(c, { AUTO_HISTORY_CONF_DIR: CONF_RET });
+      // 마커 mtime 미래 → 스로틀 무시하고 실행
+      const d = P('r16s4'); const hd = path.join(d, HD); fs.mkdirSync(hd, { recursive: true });
+      fs.writeFileSync(path.join(hd, '.retention'), 'x'); const fut = new Date(Date.now() + 3 * DAY); fs.utimesSync(path.join(hd, '.retention'), fut, fut);
+      const r4 = C.runRetention(d, { AUTO_HISTORY_CONF_DIR: CONF_RET });
+      rec(10, '(s) 리뷰 반영: archive<=keep 보호·불일치 budget·시간 예산·시계 역행', 'r1 archived=1 deleted=0 gz 유지 / r2 충돌 20개 dup 보관(archived=20)·good 유지(budget) → r2b archived=1 / r3 interrupted·마커 없음 → r3b ran=true archived=1 / r4 ran=true',
+        `r1=${r1.archived}/${r1.deleted} gz=${gzKept} r2=${r2.archived}/${r2.deleted} dups=${dups} good=${goodLeft} r2b=${r2b.archived} r3=${r3.archived}/${r3.interrupted} marker3=${marker3} r3b=${r3b.ran}/${r3b.archived}/${r3b.interrupted} r4=${r4.ran}`,
+        r1.archived === 1 && r1.deleted === 0 && gzKept
+        && r2.archived === 20 && dups === 20 && goodLeft && r2b.archived === 1
+        && r3.interrupted === true && r3.archived === 0 && !marker3 && r3b.ran === true && r3b.archived === 1 && r3b.interrupted === false
+        && r4.ran === true);
+    }
+    // (t) 리뷰 반영: install --config 가 archive<=keep·값 누락을 거부
+    {
+      const CONF_R3 = path.join(SCRATCH, 'conf-ret3'); fs.mkdirSync(CONF_R3, { recursive: true });
+      const inst = (args) => spawnSync(process.execPath, [path.join(HOOK, 'install.mjs'), ...args], { encoding: 'utf-8', env: { ...process.env, AUTO_HISTORY_CONF_DIR: CONF_R3, AUTO_HISTORY_ROOT: '', AUTO_HISTORY_LANG: '', AUTO_HISTORY_KEEP_DAYS: '', AUTO_HISTORY_ARCHIVE_DAYS: '', AUTO_HISTORY_SESSIONS_DAYS: '' } });
+      const bad1 = inst(['--config', '--keep-days', '30', '--archive-days', '30']);
+      const bad2 = inst(['--config', '--keep-days']);
+      const ok1 = inst(['--config', '--keep-days', '30', '--archive-days', '0']);
+      const ok2 = inst(['--config', '--keep-days', '0', '--archive-days', '5']);
+      rec(10, '(t) --config archive<=keep·값 누락 거부', 'bad1·bad2 exit 1·RETENTION 미생성 → ok1(archive=0)·ok2(keep=0) exit 0',
+        `bad1=${bad1.status} bad2=${bad2.status} file=${fs.existsSync(path.join(CONF_R3, 'RETENTION'))} ok1=${ok1.status} ok2=${ok2.status} err=${(bad1.stderr || '').split('\n')[0].slice(0, 80)}`,
+        bad1.status === 1 && bad2.status === 1 && /must be greater than keep/.test(bad1.stderr) && ok1.status === 0 && ok2.status === 0 && fs.existsSync(path.join(CONF_R3, 'RETENTION')));
     }
     // (p) 기존 1~9행 전부 통과
     {

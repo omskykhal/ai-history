@@ -129,14 +129,16 @@ function applyConfig(args, dry) {
   }
   // RETENTION (keep / archive / sessions, days; 0 = off). Unspecified keys keep their current (file or default) value.
   const retArgs = [['--keep-days', 'keep'], ['--archive-days', 'archive'], ['--sessions-days', 'sessions']];
-  if (retArgs.some(([k]) => argVal(args, k) !== null)) {
+  if (retArgs.some(([k]) => args.includes(k))) {
     const pol = retentionPolicy({ ...process.env, AUTO_HISTORY_KEEP_DAYS: undefined, AUTO_HISTORY_ARCHIVE_DAYS: undefined, AUTO_HISTORY_SESSIONS_DAYS: undefined });
     for (const [k, key] of retArgs) {
       const v = argVal(args, k);
-      if (v === null) continue;
+      if (v === null) { if (args.includes(k)) throw new Error(`${k} needs a value (whole number of days, 0 = off)`); continue; }
       if (!/^\d{1,5}$/.test(v)) throw new Error(`${k} must be a whole number of days (0 = off): ${v}`);
       pol[key] = parseInt(v, 10);
     }
+    // archive counts days since the log's date, so it must be greater than keep (or 0 = keep .gz forever)
+    if (pol.keep > 0 && pol.archive > 0 && pol.archive <= pol.keep) throw new Error(`--archive-days (${pol.archive}) must be greater than keep (${pol.keep}) or 0; it counts days since the log's date, not since archiving`);
     out.retention = pol;
     if (!dry) out.retentionFile = writeConf('RETENTION', `keep=${pol.keep}\narchive=${pol.archive}\nsessions=${pol.sessions}`);
   }

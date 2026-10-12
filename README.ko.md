@@ -110,7 +110,7 @@ API 키처럼 보이는 문자열(`AIza…`, `sk-…`, `ghp_…`, `Bearer …`, 
 
 ### 로그 보존
 
-일자별 로그 `YYYY-MM-DD.md` 는 30일 동안 원본으로 두고, 그보다 오래된 파일은 `.ai-history/archive/YYYY-MM-DD.md.gz` 로 압축(복원 대조가 일치할 때만 원본 삭제)하며, 365일 지난 `.gz` 는 삭제합니다. 정리는 프로젝트당 24시간에 한 번, 세션 시작 또는 앵커 변경 시에 돌고, 오늘·어제 로그와 `STATUS.md` 는 건드리지 않습니다. 숫자는 `RETENTION` 파일 또는 `node install.mjs --config --keep-days 60 --archive-days 0` 으로 바꾸고, `keep=0` 이면 로그 회전 전체를 끕니다.
+일자별 로그 `YYYY-MM-DD.md` 는 30일 동안 원본으로 두고, 그보다 오래된 파일은 `.ai-history/archive/YYYY-MM-DD.md.gz` 로 압축(복원 대조가 일치할 때만 원본 삭제)하며, 로그 날짜가 365일을 넘고 **동시에** `.gz` 자체가 `archive − keep` 일 이상 존재했을 때만 삭제합니다(압축 직후 삭제되는 일이 없도록, `archive` 는 `keep` 보다 커야 하며 0 이면 영구 보관). 정리는 프로젝트당 24시간에 한 번, 세션 시작 또는 앵커 변경 시에 돌고, 오늘·어제 로그와 `STATUS.md` 는 건드리지 않습니다. 숫자는 `RETENTION` 파일 또는 `node install.mjs --config --keep-days 60 --archive-days 0` 으로 바꾸고, `keep=0` 이면 로그 회전 전체를 끕니다.
 
 ### 비대화형 실행
 
@@ -148,7 +148,7 @@ API 키처럼 보이는 문자열(`AIza…`, `sk-…`, `ghp_…`, `Bearer …`, 
 node test/run-tests.mjs <scratch-dir>
 ```
 
-190건(훅 동작·앵커 규칙·별칭/폴더 매칭·STATUS 추출·안전 예외·설치기 왕복·영어 모드·로그 보존·다중 세션 STATUS). 시험 산출물은 OS 임시 폴더에만 생기고 실제 프로젝트엔 쓰지 않습니다.
+192건(훅 동작·앵커 규칙·별칭/폴더 매칭·STATUS 추출·안전 예외·설치기 왕복·영어 모드·로그 보존·다중 세션 STATUS). 시험 산출물은 OS 임시 폴더에만 생기고 실제 프로젝트엔 쓰지 않습니다.
 
 ## 알려진 한계
 
