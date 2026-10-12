@@ -1,6 +1,7 @@
 # per-machine configuration and runtime data (never commit)
 /ROOT
 /LANG
+/RETENTION
 /ALIASES
 /NO_BLOCK
 /NO_BLOCK_CODEX

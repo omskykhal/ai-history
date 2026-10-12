@@ -40,6 +40,9 @@ const STR = {
     logTailAllowed: '[STATUS] 꼬리 텍스트 허용',
     logIncomplete: (m) => `[STATUS] 형식 불완전(누락: ${m})`,
     userUnknownField: '(본문 필드 미확인)',
+    readerOthers: (n) => `=== 다른 세션 STATUS(48시간 내, 최대 ${n}개) ===`,
+    otherSessionHead: (sid, agent, mine) => `--- 세션 ${sid} (${agent})${mine ? ' (이 세션)' : ''} ---`,
+    logRetention: (a, d, s) => `[retention] 압축 ${a}·gz 삭제 ${d}·세션 사본 삭제 ${s}`,
   },
   en: {
     headings: ['Working on', 'Done', 'Next', 'Progress'],
@@ -74,6 +77,9 @@ const STR = {
     logTailAllowed: '[STATUS] trailing text allowed',
     logIncomplete: (m) => `[STATUS] incomplete (missing: ${m})`,
     userUnknownField: '(prompt field not found)',
+    readerOthers: (n) => `=== Other sessions' STATUS (last 48h, up to ${n}) ===`,
+    otherSessionHead: (sid, agent, mine) => `--- session ${sid} (${agent})${mine ? ' (this session)' : ''} ---`,
+    logRetention: (a, d, s) => `[retention] archived ${a} · gz deleted ${d} · session copies deleted ${s}`,
   },
 };
 
@@ -103,6 +109,7 @@ export const ALL_HEADINGS = LANGS.map((l) => STR[l].headings);
 // STATUS header keys of every language (parsed regardless of the active language).
 export const AUTHOR_KEYS = LANGS.map((l) => STR[l].statusHead.author);
 export const UPDATED_KEYS = LANGS.map((l) => STR[l].statusHead.updated);
+export const SESSION_KEYS = LANGS.map((l) => STR[l].statusHead.session);
 // Folder-mention keywords (always accepted in every language): "<name> project|folder" / "project|folder <name>".
 export const KW_PROJECT = ['프로젝트', 'project'];
 export const KW_FOLDER = ['폴더', 'folder'];

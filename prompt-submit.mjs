@@ -2,7 +2,7 @@
 import {
   runHook, readInput, emit, resolveAnchor, isInteractive, statePaths, writeState, removeFile, appendLog,
   maybeDump, mask, oneLine, statusFormatFor, listHistoryProjects, listCandidateFolders, loadAliases, matchProjectMention, readerBody, READER_TOTAL_MAX,
-  AGENT, historyDirName, lastWorkerLine, t,
+  AGENT, historyDirName, lastWorkerLine, t, runRetention, retentionLogLine,
 } from './common.mjs';
 
 runHook(async () => {
@@ -27,6 +27,8 @@ runHook(async () => {
 
   const text = raw === undefined ? L.userUnknownField : oneLine(mask(oneLine(raw)), 120);
   appendLog(r.anchor, data, `[User] ${text}`, env);
+  // the anchor changed with this prompt → retention for the new anchor (24h throttle)
+  if (r.changed) { const rl = retentionLogLine(runRetention(r.anchor, env), env); if (rl) appendLog(r.anchor, data, rl, env); }
   maybeDump('UserPromptSubmit', data, env);
 
   // non-interactive / sub-agent / no state → log only
@@ -36,7 +38,7 @@ runHook(async () => {
   if (hit && r.anchor === hit.anchor && r.previous !== hit.anchor) {
     let reader = hit.recorded === false
       ? L.mentionUnrecorded(hit.name, hit.dir)
-      : L.mentionRecorded(hit.name, hit.dir) + readerBody(hit.anchor, env);
+      : L.mentionRecorded(hit.name, hit.dir) + readerBody(hit.anchor, env, { sid8: String(data.session_id).slice(0, 8) });
     const lw = hit.recorded === false ? '' : lastWorkerLine(hit.anchor, env);
     if (lw) reader = `[auto-history] ${lw}\n${reader}`;
     if (reader.length > READER_TOTAL_MAX) reader = reader.slice(0, READER_TOTAL_MAX);

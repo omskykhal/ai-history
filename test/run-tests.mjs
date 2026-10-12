@@ -1,4 +1,4 @@
-// auto-history 단위 시험 (플랜 v4.1 §5 1~6행 + 변경 2 §14.4 = 7행, 2c (p)~(v), §15 = 8행). 사용: node run-tests.mjs <scratch-dir> [<설치 전 settings 사본>]
+// auto-history 단위 시험 (플랜 v4.1 §5 1~6행 + 변경 2 §14.4 = 7행, 2c (p)~(v), §15 = 8행, 배포 일반화 = 9행, 보존·다중 세션 = 10행). 사용: node run-tests.mjs <scratch-dir> [<설치 전 settings 사본>]
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -1203,6 +1203,231 @@ async function main() {
       rec(9, '(cx-a) codex hooks.json 병합', '기존 foreign 보존·Stop 2그룹·5 이벤트·백업 생성·재실행 changed=false', `existed=${r1.existed} changed=${r1.changed} backup=${!!(r1.backup && fs.existsSync(r1.backup))} stop=${stopGroups.length} evs=${Object.keys(j.hooks || {}).length} again=${r2.changed} same=${JSON.stringify(j) === JSON.stringify(j2)}`,
         r1.existed === true && r1.changed === true && r1.backup && fs.existsSync(r1.backup) && stopGroups.length === 2 && stopGroups[0].hooks[0].command === 'echo foreign'
           && Object.keys(j.hooks).length === 5 && r2.changed === false && JSON.stringify(j) === JSON.stringify(j2));
+    }
+  }
+
+  // ---------- 10행 로그 보존(retention) + 같은 폴더 다중 세션 STATUS ----------
+  {
+    const zlib = await import('node:zlib');
+    const DAY = 86400000;
+    const dstr = (daysAgo, now = Date.now()) => C.ymd(new Date(now - daysAgo * DAY));
+    const setOld = (f, daysAgo) => { const t = new Date(Date.now() - daysAgo * DAY); fs.utimesSync(f, t, t); };
+    const ctxOf = (out) => { try { return JSON.parse(out).hookSpecificOutput.additionalContext || ''; } catch { return ''; } };
+    const sessFile = (a, sid, agent = 'claude') => path.join(a, HD, 'sessions', `${agent}-${sid.slice(0, 8)}.md`);
+    const CONF_RET = path.join(SCRATCH, 'conf-ret');
+    fs.mkdirSync(CONF_RET, { recursive: true });
+    fs.writeFileSync(path.join(CONF_RET, 'INTERACTIVE_ENTRYPOINTS'), 'cli\n');
+    fs.writeFileSync(path.join(CONF_RET, 'RETENTION'), '# 시험\nkeep=10\narchive = 100\nsessions=3\nbogus=5\nkeep=abc\n');
+
+    // (a) 정책 해석: 기본값 / RETENTION 파일 / env 우선 / 잘못된 값 무시
+    {
+      const def = C.retentionPolicy({ AUTO_HISTORY_CONF_DIR: path.join(SCRATCH, 'no-such-conf') });
+      const file = C.retentionPolicy({ AUTO_HISTORY_CONF_DIR: CONF_RET });
+      const envp = C.retentionPolicy({ AUTO_HISTORY_CONF_DIR: CONF_RET, AUTO_HISTORY_KEEP_DAYS: '45', AUTO_HISTORY_ARCHIVE_DAYS: '0', AUTO_HISTORY_SESSIONS_DAYS: 'x' });
+      rec(10, '(a) retentionPolicy 기본·파일·env', 'def 30/365/7 · file 10/100/3 · env 45/0/3', `${JSON.stringify(def)} ${JSON.stringify(file)} ${JSON.stringify(envp)}`,
+        JSON.stringify(def) === '{"keep":30,"archive":365,"sessions":7}' && JSON.stringify(file) === '{"keep":10,"archive":100,"sessions":3}'
+        && JSON.stringify(envp) === '{"keep":45,"archive":0,"sessions":3}');
+    }
+    // (b) runRetention: 오래된 로그 → gz 이동(복원 일치), 오늘·어제·keep 이내 유지, 오래된 gz 삭제, 오래된 세션 사본 삭제, 마커 생성
+    const aB = P('r16b');
+    {
+      const h = path.join(aB, HD); fs.mkdirSync(path.join(h, 'archive'), { recursive: true }); fs.mkdirSync(path.join(h, 'sessions'), { recursive: true });
+      const mk = (days, body) => fs.writeFileSync(path.join(h, `${dstr(days)}.md`), body);
+      mk(0, '- today\n'); mk(1, '- yday\n'); mk(5, '- d5\n'); mk(10, '- d10\n'); mk(11, '- d11 old\n'); mk(40, '- d40 old\n'.repeat(500));
+      fs.writeFileSync(path.join(h, 'STATUS.md'), '# STATUS\n세션: aaaaaaaa\n');
+      fs.writeFileSync(path.join(h, 'archive', `${dstr(101)}.md.gz`), zlib.gzipSync('old'));
+      fs.writeFileSync(path.join(h, 'archive', `${dstr(99)}.md.gz`), zlib.gzipSync('keep'));
+      fs.writeFileSync(path.join(h, 'sessions', 'claude-11111111.md'), '# STATUS\n세션: 11111111\n'); setOld(path.join(h, 'sessions', 'claude-11111111.md'), 4);
+      fs.writeFileSync(path.join(h, 'sessions', 'claude-22222222.md'), '# STATUS\n세션: 22222222\n');
+      const env = { AUTO_HISTORY_CONF_DIR: CONF_RET };
+      const res = C.runRetention(aB, env);
+      const names = fs.readdirSync(h).sort().join(',');
+      const arch = fs.readdirSync(path.join(h, 'archive')).sort().join(',');
+      const back40 = (() => { try { return zlib.gunzipSync(fs.readFileSync(path.join(h, 'archive', `${dstr(40)}.md.gz`))).toString(); } catch { return ''; } })();
+      const sess = fs.readdirSync(path.join(h, 'sessions')).join(',');
+      const ok = res.ran && res.archived === 2 && res.deleted === 1 && res.sessionsDeleted === 1
+        && !fs.existsSync(path.join(h, `${dstr(11)}.md`)) && !fs.existsSync(path.join(h, `${dstr(40)}.md`))
+        && [0, 1, 5, 10].every((d) => fs.existsSync(path.join(h, `${dstr(d)}.md`))) && fs.existsSync(path.join(h, 'STATUS.md'))
+        && arch === [`${dstr(11)}.md.gz`, `${dstr(40)}.md.gz`, `${dstr(99)}.md.gz`].sort().join(',')
+        && back40 === '- d40 old\n'.repeat(500) && sess === 'claude-22222222.md' && fs.existsSync(path.join(h, '.retention'));
+      rec(10, '(b) runRetention keep=10·archive=100·sessions=3', 'd11·d40→gz(복원 일치)·today/yday/d5/d10/STATUS 유지·gz101 삭제·gz99 유지·세션4일 삭제·마커',
+        `res=${JSON.stringify(res)} files=${names} arch=${arch} sess=${sess} back=${back40.length}`, ok);
+      // (c) 24h 스로틀 → ran=false·무변경 / force → ran=true
+      mk(12, '- d12 late\n');
+      const r2 = C.runRetention(aB, env);
+      const r3 = C.runRetention(aB, env, { force: true });
+      rec(10, '(c) 24h 스로틀·force', 'r2.ran=false·d12 유지 → force: ran=true·d12 압축', `r2=${JSON.stringify(r2)} d12after2=${fs.existsSync(path.join(h, `${dstr(12)}.md`))} r3=${JSON.stringify(r3)} d12after3=${fs.existsSync(path.join(h, `${dstr(12)}.md`))}`,
+        r2.ran === false && r3.ran === true && r3.archived === 1 && !fs.existsSync(path.join(h, `${dstr(12)}.md`)) && fs.existsSync(path.join(h, 'archive', `${dstr(12)}.md.gz`)));
+      // (c-2) 마커가 하루 넘게 오래되면 다시 실행
+      setOld(path.join(h, '.retention'), 2); mk(13, '- d13\n');
+      const r4 = C.runRetention(aB, env);
+      rec(10, '(c-2) 마커 25h 경과 → 재실행', 'ran=true·archived=1', JSON.stringify(r4), r4.ran === true && r4.archived === 1);
+    }
+    // (d) keep=0 → 로그 압축·gz 삭제 없음(세션 사본 정리는 유지) / archive=0 → gz 영구 보관 / sessions=0 → 사본 보존
+    {
+      const a = P('r16d'); const h = path.join(a, HD); fs.mkdirSync(path.join(h, 'archive'), { recursive: true }); fs.mkdirSync(path.join(h, 'sessions'), { recursive: true });
+      fs.writeFileSync(path.join(h, `${dstr(400)}.md`), 'x'); fs.writeFileSync(path.join(h, 'archive', `${dstr(900)}.md.gz`), zlib.gzipSync('x'));
+      fs.writeFileSync(path.join(h, 'sessions', 'claude-99999999.md'), 'x'); setOld(path.join(h, 'sessions', 'claude-99999999.md'), 30);
+      const r0 = C.runRetention(a, { AUTO_HISTORY_CONF_DIR: CONF_RET, AUTO_HISTORY_KEEP_DAYS: '0' }, { force: true });
+      const keep0ok = r0.ran && r0.archived === 0 && r0.deleted === 0 && r0.sessionsDeleted === 1 && fs.existsSync(path.join(h, `${dstr(400)}.md`)) && fs.existsSync(path.join(h, 'archive', `${dstr(900)}.md.gz`));
+      const ra = C.runRetention(a, { AUTO_HISTORY_CONF_DIR: CONF_RET, AUTO_HISTORY_ARCHIVE_DAYS: '0' }, { force: true });
+      const arch0ok = ra.archived === 1 && ra.deleted === 0 && fs.existsSync(path.join(h, 'archive', `${dstr(900)}.md.gz`)) && !fs.existsSync(path.join(h, `${dstr(400)}.md`));
+      fs.writeFileSync(path.join(h, 'sessions', 'claude-88888888.md'), 'x'); setOld(path.join(h, 'sessions', 'claude-88888888.md'), 30);
+      const rs = C.runRetention(a, { AUTO_HISTORY_CONF_DIR: CONF_RET, AUTO_HISTORY_SESSIONS_DAYS: '0' }, { force: true });
+      rec(10, '(d) keep=0 / archive=0 / sessions=0', 'keep0: 압축0·삭제0·세션1 / archive0: 압축1·gz900 유지 / sessions0: 사본 유지',
+        `keep0=${JSON.stringify(r0)} arch0=${JSON.stringify(ra)} sess0=${JSON.stringify(rs)} s88=${fs.existsSync(path.join(h, 'sessions', 'claude-88888888.md'))}`,
+        keep0ok && arch0ok && rs.sessionsDeleted === 0 && fs.existsSync(path.join(h, 'sessions', 'claude-88888888.md')));
+    }
+    // (e) 충돌: archive 에 같은 이름 gz 가 다른 내용으로 이미 있으면 원본 보존(삭제 0)
+    {
+      const a = P('r16e'); const h = path.join(a, HD); fs.mkdirSync(path.join(h, 'archive'), { recursive: true });
+      fs.writeFileSync(path.join(h, `${dstr(50)}.md`), 'real'); fs.writeFileSync(path.join(h, 'archive', `${dstr(50)}.md.gz`), zlib.gzipSync('different'));
+      const r = C.runRetention(a, { AUTO_HISTORY_CONF_DIR: CONF_RET }, { force: true });
+      const gzBack = zlib.gunzipSync(fs.readFileSync(path.join(h, 'archive', `${dstr(50)}.md.gz`))).toString();
+      rec(10, '(e) gz 충돌(내용 불일치) → 원본 보존', 'archived=0·원본 존재·gz 원래 내용', `r=${JSON.stringify(r)} src=${fs.existsSync(path.join(h, `${dstr(50)}.md`))} gz=${gzBack}`,
+        r.archived === 0 && fs.existsSync(path.join(h, `${dstr(50)}.md`)) && gzBack === 'different');
+    }
+    // (f) 1회 상한 20개
+    {
+      const a = P('r16f'); const h = path.join(a, HD); fs.mkdirSync(h, { recursive: true });
+      for (let i = 0; i < 25; i++) fs.writeFileSync(path.join(h, `${dstr(100 + i)}.md`), `x${i}`);
+      const r = C.runRetention(a, { AUTO_HISTORY_CONF_DIR: CONF_RET }, { force: true });
+      const left = fs.readdirSync(h).filter((n) => /^\d{4}-\d\d-\d\d\.md$/.test(n)).length;
+      rec(10, '(f) 1회 최대 20개', 'archived=20·남은 로그 5', `archived=${r.archived} left=${left}`, r.archived === 20 && left === 5);
+    }
+    // (g) 훅 통합: SessionStart 가 정리 실행 + [retention] 로그 1줄, 히스토리 없는 폴더는 무동작·.ai-history 미생성
+    {
+      const a = P('r16g'); const h = path.join(a, HD); fs.mkdirSync(h, { recursive: true });
+      fs.writeFileSync(path.join(h, `${dstr(60)}.md`), '- old\n'); fs.writeFileSync(path.join(h, 'STATUS.md'), '# STATUS\n세션: zzzzzzzz\n작성: claude (zzzzzzzz)\n갱신: t\n앵커: a\n\n## 하던 일\n- G_MARK\n');
+      const sid = sidNew();
+      const r = run('session-start.mjs', { session_id: sid, source: 'startup', cwd: a }, baseEnv(sid, { AUTO_HISTORY_CONF_DIR: CONF_RET }));
+      const log = logOf(a);
+      const g1 = fs.existsSync(path.join(h, 'archive', `${dstr(60)}.md.gz`)) && !fs.existsSync(path.join(h, `${dstr(60)}.md`)) && /\[retention\] 압축 1·gz 삭제 0·세션 사본 삭제 0$/.test(log.trim()) && /G_MARK/.test(ctxOf(r.out));
+      const a2 = P('r16g2'); fs.mkdirSync(a2, { recursive: true });
+      const sid2 = sidNew();
+      run('session-start.mjs', { session_id: sid2, source: 'startup', cwd: a2 }, baseEnv(sid2, { AUTO_HISTORY_CONF_DIR: CONF_RET }));
+      rec(10, '(g) SessionStart 정리+[retention] 로그·신규 폴더 무생성', 'gz 생성·원본 삭제·로그 1줄·Reader 정상 / 신규: .ai-history 없음', `g1=${g1} log=${lastLine(log)} new=${fs.existsSync(path.join(a2, HD))}`,
+        g1 && !fs.existsSync(path.join(a2, HD)));
+      // (g-2) 두 번째 SessionStart(같은 날) → 스로틀로 로그 줄 추가 없음
+      const n0 = logOf(a).split('\n').filter((l) => /\[retention\]/.test(l)).length;
+      const sid3 = sidNew();
+      run('session-start.mjs', { session_id: sid3, source: 'startup', cwd: a }, baseEnv(sid3, { AUTO_HISTORY_CONF_DIR: CONF_RET }));
+      const n1 = logOf(a).split('\n').filter((l) => /\[retention\]/.test(l)).length;
+      rec(10, '(g-2) 재시작 스로틀', '[retention] 줄 수 변화 없음(1)', `${n0}→${n1}`, n0 === 1 && n1 === 1);
+    }
+    // (h) 변경 없는 정리는 로그 없음(마커만)
+    {
+      const a = P('r16h'); const h = path.join(a, HD); fs.mkdirSync(h, { recursive: true }); fs.writeFileSync(path.join(h, 'STATUS.md'), '# STATUS\n');
+      const sid = startSession(a);
+      rec(10, '(h) 정리 대상 없음 → [retention] 로그 없음·마커 있음', 'log 에 [retention] 0·.retention 존재', `ret=${/\[retention\]/.test(logOf(a))} marker=${fs.existsSync(path.join(h, '.retention'))} sid=${sid.slice(0, 4)}`,
+        !/\[retention\]/.test(logOf(a)) && fs.existsSync(path.join(h, '.retention')));
+    }
+    // (i) §17 Stop → STATUS.md + sessions/claude-<id8>.md 동일 내용
+    const aI = P('r17i');
+    const sI1 = startSession(aI); arm(sI1);
+    {
+      run('stop.mjs', { session_id: sI1, cwd: aI, last_assistant_message: `끝\n${block('S1')}` }, baseEnv(sI1));
+      const s = statusOf(aI) || ''; const c = (() => { try { return fs.readFileSync(sessFile(aI, sI1), 'utf-8'); } catch { return null; } })();
+      rec(10, '(i) Stop → sessions 사본', 'sessions/claude-<id8>.md 존재·STATUS.md 와 동일', `exists=${c !== null} same=${c === s}`, c !== null && c === s && /- S1 하던 일/.test(s));
+    }
+    // (j) 두 세션 같은 폴더: STATUS.md=마지막(S2), Reader(S1 기준)=다른 세션 S1 "(이 세션)", Reader(S2 기준)=S1 표시·S2 중복 없음
+    const sI2 = startSession(aI); arm(sI2);
+    {
+      run('stop.mjs', { session_id: sI2, cwd: aI, last_assistant_message: `끝\n${block('S2')}` }, baseEnv(sI2));
+      const s = statusOf(aI) || '';
+      const r1 = C.readerBody(aI, baseEnv(sI1), { sid8: sI1.slice(0, 8) });
+      const r2 = C.readerBody(aI, baseEnv(sI2), { sid8: sI2.slice(0, 8) });
+      const ok = /- S2 하던 일/.test(s) && new RegExp(`^세션: ${sI2.slice(0, 8)}$`, 'm').test(s)
+        && /=== 다른 세션 STATUS\(48시간 내, 최대 2개\) ===/.test(r1) && new RegExp(`--- 세션 ${sI1.slice(0, 8)} \\(claude\\) \\(이 세션\\) ---`).test(r1) && /- S1 하던 일/.test(r1)
+        && (r1.match(/- S2 하던 일/g) || []).length === 1
+        && new RegExp(`--- 세션 ${sI1.slice(0, 8)} \\(claude\\) ---`).test(r2) && !/\(이 세션\)/.test(r2) && (r2.match(/- S2 하던 일/g) || []).length === 1;
+      rec(10, '(j) 두 세션 → STATUS=S2·Reader 다른 세션=S1(이 세션 표시)', 'S1 Reader: 다른 세션 절·S1(이 세션)·S2 1회 / S2 Reader: S1 표시·(이 세션) 없음', `s=${(s.match(/^세션: .+$/m) || [''])[0]} r1=${r1.replace(/\n/g, '⏎').slice(0, 400)}`, ok);
+    }
+    // (k) resume 주입: S1 이 SessionStart(resume) 하면 자기 사본이 "(이 세션)" 으로 주입됨
+    {
+      const r = run('session-start.mjs', { session_id: sI1, source: 'resume', cwd: aI }, baseEnv(sI1));
+      const ctx = ctxOf(r.out);
+      rec(10, '(k) S1 resume → 자기 STATUS 사본 주입', 'ctx 에 S1 하던 일·(이 세션)·STATUS.md 는 S2', `len=${ctx.length} s1=${/- S1 하던 일/.test(ctx)} mine=${/\(이 세션\)/.test(ctx)} s2=${/- S2 하던 일/.test(ctx)}`,
+        /- S1 하던 일/.test(ctx) && /\(이 세션\)/.test(ctx) && /- S2 하던 일/.test(ctx));
+    }
+    // (l) 48h 창·최대 2개: 사본 4개(S1 49h 전, S3·S4 최신) → S4=STATUS, 다른 세션 = S3·S2 만, S1 제외
+    {
+      setOld(sessFile(aI, sI1), 49 / 24);
+      for (const tag of ['S3', 'S4']) {
+        const sid = startSession(aI); arm(sid);
+        run('stop.mjs', { session_id: sid, cwd: aI, last_assistant_message: `끝\n${block(tag)}` }, baseEnv(sid));
+        if (tag === 'S3') setOld(sessFile(aI, sid), 1 / 24);
+      }
+      const r = C.readerBody(aI, baseEnv(sI2), { sid8: sI2.slice(0, 8) });
+      const others = (r.match(/^--- 세션 /gm) || []).length;
+      rec(10, '(l) 48h 밖 제외·최신 2개만', 'S1 없음·S3·S2 표시(STATUS=S4 제외)·2개', `others=${others} s1=${/- S1 하던 일/.test(r)} s2=${/- S2 하던 일/.test(r)} s3=${/- S3 하던 일/.test(r)} s4cnt=${(r.match(/- S4 하던 일/g) || []).length}`,
+        others === 2 && !/- S1 하던 일/.test(r) && /- S2 하던 일/.test(r) && /- S3 하던 일/.test(r) && (r.match(/- S4 하던 일/g) || []).length === 1);
+    }
+    // (m) codex + claude 같은 폴더: sessions/codex-<id8>.md, Reader 에 (codex) 표시
+    {
+      const a = P('r17m'); fs.mkdirSync(a, { recursive: true });
+      const sc = sidNew();
+      const cxEnv = baseEnv(sc, { CLAUDE_CODE_ENTRYPOINT: undefined, CLAUDE_CODE_SESSION_ID: undefined });
+      run('session-start.mjs', { session_id: sc, source: 'startup', cwd: a }, cxEnv, ['--agent', 'codex']);
+      run('stop.mjs', { session_id: sc, cwd: a, last_assistant_message: `끝\n${block('CX')}` }, cxEnv, ['--agent', 'codex']);
+      const sk = startSession(a); arm(sk);
+      run('stop.mjs', { session_id: sk, cwd: a, last_assistant_message: `끝\n${block('CL')}` }, baseEnv(sk));
+      const r = C.readerBody(a, baseEnv(sk), { sid8: sk.slice(0, 8) });
+      rec(10, '(m) codex+claude 사본·Reader (codex) 표시', 'sessions/codex-<id8>.md 존재·--- 세션 <id8> (codex) ---·CX 내용', `cx=${fs.existsSync(sessFile(a, sc, 'codex'))} r=${r.replace(/\n/g, '⏎').slice(0, 300)}`,
+        fs.existsSync(sessFile(a, sc, 'codex')) && new RegExp(`--- 세션 ${sc.slice(0, 8)} \\(codex\\) ---`).test(r) && /- CX 하던 일/.test(r));
+    }
+    // (n) sessions 폴더 없음·STATUS 없음 → otherSessionsBody '' · 기존 Reader 형식 유지
+    {
+      const a = P('r17n'); fs.mkdirSync(path.join(a, HD), { recursive: true });
+      const o = C.otherSessionsBody(a, baseEnv('x'));
+      const r = C.readerBody(a, baseEnv('x'));
+      rec(10, '(n) 사본 없음 → 절 생략', "''·Reader 에 '다른 세션' 없음", `o='${o}' hasOther=${/다른 세션/.test(r)}`, o === '' && !/다른 세션/.test(r) && /=== STATUS.md ===/.test(r));
+    }
+    // (o) 상한: READER_TOTAL_MAX=10000, 사본 1,000자 절단
+    {
+      const a = P('r17o'); const h = path.join(a, HD); fs.mkdirSync(path.join(h, 'sessions'), { recursive: true });
+      fs.writeFileSync(path.join(h, 'STATUS.md'), '# STATUS\n세션: aaaaaaaa\n');
+      fs.writeFileSync(path.join(h, 'sessions', 'claude-bbbbbbbb.md'), `# STATUS\n세션: bbbbbbbb\n작성: claude (bbbbbbbb)\n\n${'y'.repeat(3000)}`);
+      const o = C.otherSessionsBody(a, baseEnv('x'));
+      rec(10, '(o) 사본 1,000자 절단·상한 10000', 'len≈1000+…(생략)·READER_TOTAL_MAX=10000', `olen=${o.length} trunc=${/…\(생략\)/.test(o)} max=${C.READER_TOTAL_MAX}`,
+        /…\(생략\)/.test(o) && o.length < 1200 && C.READER_TOTAL_MAX === 10000);
+    }
+    // (q) 영어 모드: 다른 세션 절·retention 로그 영어 문구, 헤더는 양언어 파싱
+    {
+      const a = P('r17q'); const h = path.join(a, HD); fs.mkdirSync(path.join(h, 'sessions'), { recursive: true });
+      fs.writeFileSync(path.join(h, 'STATUS.md'), '# STATUS\nSession: aaaaaaaa\nAuthor: claude (aaaaaaaa)\n\n## Working on\n- A\n');
+      fs.writeFileSync(path.join(h, 'sessions', 'codex-bbbbbbbb.md'), '# STATUS\nSession: bbbbbbbb\nAuthor: codex (bbbbbbbb)\n\n## Working on\n- B_EN\n');
+      fs.writeFileSync(path.join(h, `${dstr(60)}.md`), '- old\n');
+      const envEn = { AUTO_HISTORY_CONF_DIR: CONF_RET, AUTO_HISTORY_LANG: 'en' };
+      const o = C.otherSessionsBody(a, envEn, 'bbbbbbbb');
+      const rl = C.retentionLogLine(C.runRetention(a, envEn, { force: true }), envEn);
+      const koMix = C.otherSessionsBody(a, { ...envEn, AUTO_HISTORY_LANG: 'ko' }, null);
+      rec(10, '(q) 영어 모드 문구·헤더 양언어 파싱', "=== Other sessions' STATUS (last 48h, up to 2) ===·--- session bbbbbbbb (codex) (this session) ---·[retention] archived 1 · gz deleted 0 · session copies deleted 0·ko 에서도 영어 헤더 파싱",
+        `o=${o.replace(/\n/g, '⏎').slice(0, 160)} rl=${rl} ko=${/B_EN/.test(koMix)}`,
+        /=== Other sessions' STATUS \(last 48h, up to 2\) ===/.test(o) && /--- session bbbbbbbb \(codex\) \(this session\) ---/.test(o) && /- B_EN/.test(o)
+        && rl === '[retention] archived 1 · gz deleted 0 · session copies deleted 0' && /B_EN/.test(koMix) && /--- 세션 bbbbbbbb \(codex\) ---/.test(koMix));
+    }
+    // (r) install --config --keep-days/--archive-days/--sessions-days → RETENTION 파일, --status 에 retention, 잘못된 값 exit 1, dry-run 무변경
+    {
+      const CONF_R2 = path.join(SCRATCH, 'conf-ret2'); fs.mkdirSync(CONF_R2, { recursive: true });
+      const inst = (args) => spawnSync(process.execPath, [path.join(HOOK, 'install.mjs'), ...args], { encoding: 'utf-8', env: { ...process.env, AUTO_HISTORY_CONF_DIR: CONF_R2, AUTO_HISTORY_ROOT: '', AUTO_HISTORY_LANG: '', AUTO_HISTORY_KEEP_DAYS: '', AUTO_HISTORY_ARCHIVE_DAYS: '', AUTO_HISTORY_SESSIONS_DAYS: '' } });
+      const c1 = inst(['--config', '--keep-days', '60']);
+      const f1 = fs.existsSync(path.join(CONF_R2, 'RETENTION')) ? fs.readFileSync(path.join(CONF_R2, 'RETENTION'), 'utf-8') : '';
+      const c2 = inst(['--config', '--archive-days', '0']);
+      const pol = C.retentionPolicy({ AUTO_HISTORY_CONF_DIR: CONF_R2 });
+      const bad = inst(['--config', '--keep-days', 'x']);
+      let stt = {}; try { stt = JSON.parse(inst(['--status']).stdout); } catch { /* */ }
+      const dry = inst(['--config', '--sessions-days', '1', '--dry-run']);
+      const polAfterDry = C.retentionPolicy({ AUTO_HISTORY_CONF_DIR: CONF_R2 });
+      rec(10, '(r) --config RETENTION·--status·잘못된 값·dry-run', 'keep=60 → archive=0 누적(keep 유지)·status.retention 일치·bad exit 1·dry-run 무변경',
+        `c1=${c1.status} f1=${JSON.stringify(f1)} c2=${c2.status} pol=${JSON.stringify(pol)} bad=${bad.status} status=${JSON.stringify(stt.retention)} src=${stt.retentionSource} dry=${dry.status} afterDry=${JSON.stringify(polAfterDry)}`,
+        c1.status === 0 && f1 === 'keep=60\narchive=365\nsessions=7\n' && c2.status === 0 && JSON.stringify(pol) === '{"keep":60,"archive":0,"sessions":7}'
+        && bad.status === 1 && JSON.stringify(stt.retention) === JSON.stringify(pol) && stt.retentionSource === 'RETENTION file (+env)' && dry.status === 0 && JSON.stringify(polAfterDry) === JSON.stringify(pol));
+    }
+    // (p) 기존 1~9행 전부 통과
+    {
+      const prior = results.filter((x) => x.row <= 9);
+      rec(10, '(p) 기존 1~9행 전부 통과', `${prior.length}/${prior.length} PASS`, `${prior.filter((x) => x.pass).length}/${prior.length}`, prior.every((x) => x.pass));
     }
   }
 

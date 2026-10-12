@@ -4,7 +4,7 @@ import path from 'node:path';
 import {
   runHook, readInput, emit, resolveAnchor, isInteractive, statePaths, writeState, removeFile, appendLog,
   maybeDump, mask, oneLine, confFileExists, historyDir, writeAtomic, statusFormatFor, statusHeader, missingHeadings,
-  agentConfName, t,
+  agentConfName, t, sessionStatusPath,
 } from './common.mjs';
 
 const BEGIN_RE = /^<!-- STATUS:BEGIN -->\r?$/;
@@ -140,7 +140,12 @@ runHook(async () => {
     if (st.missing.length) appendLog(anchor, data, L.logIncomplete(st.missing.join(', ')), env);
     try {
       fs.mkdirSync(historyDir(anchor, env), { recursive: true });
-      writeAtomic(path.join(historyDir(anchor, env), 'STATUS.md'), `${statusHeader(sid8, anchor, env)}\n${st.body}\n`);
+      const content = `${statusHeader(sid8, anchor, env)}\n${st.body}\n`;
+      writeAtomic(path.join(historyDir(anchor, env), 'STATUS.md'), content);
+      // per-session copy (several sessions in one folder): sessions/<agent>-<id8>.md
+      const sp17 = sessionStatusPath(anchor, sid8, env);
+      fs.mkdirSync(path.dirname(sp17), { recursive: true });
+      writeAtomic(sp17, content);
     } catch { /* fail-open */ }
     appendLog(anchor, data, L.logTurnEndStatus(oneLine(mask(oneLine(st.rest)), 300)), env);
   } else if (!msg.trim()) {

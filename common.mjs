@@ -3,8 +3,9 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
-import { getLang, T, statusFormat, ALL_HEADINGS, AUTHOR_KEYS, UPDATED_KEYS, KW_PROJECT, KW_FOLDER } from './i18n.mjs';
+import { getLang, T, statusFormat, ALL_HEADINGS, AUTHOR_KEYS, UPDATED_KEYS, SESSION_KEYS, KW_PROJECT, KW_FOLDER } from './i18n.mjs';
 
 export const HOOK_DIR = path.dirname(fileURLToPath(import.meta.url));
 export const IS_WIN = process.platform === 'win32';
@@ -475,10 +476,10 @@ export function matchProjectMention(prompt0, projects, folders, aliases) {
   return al ? al.hit : fo;
 }
 
-// Reader body: STATUS.md (≤4,000 chars) + today's tail 40 lines + yesterday's tail 20 lines
-export const READER_TOTAL_MAX = 8000;
+// Reader body: STATUS.md (≤4,000 chars) + other sessions' STATUS (last 48h, newest 2, ≤1,000 chars each) + today's tail 40 lines + yesterday's tail 20 lines
+export const READER_TOTAL_MAX = 10000;
 const READER_STATUS_MAX = 4000;
-export function readerBody(anchor, env = process.env) {
+export function readerBody(anchor, env = process.env, opts = {}) {
   const L = t(env);
   const hdir = historyDir(anchor, env);
   let status = '';
@@ -489,8 +490,153 @@ export function readerBody(anchor, env = process.env) {
   const tToday = tailLines(path.join(hdir, `${ymd(today)}.md`), 40);
   const tYday = tailLines(path.join(hdir, `${ymd(yday)}.md`), 20);
   return `\n\n${L.readerStatus}\n${status || L.readerNoStatus}`
+    + otherSessionsBody(anchor, env, opts.sid8)
     + `\n\n${L.readerToday(ymd(today))}\n${tToday || L.readerNone}`
     + `\n\n${L.readerYday(ymd(yday))}\n${tYday || L.readerNone}`;
+}
+
+// Multiple sessions in one folder: Stop writes STATUS.md (last writer) AND a per-session copy <history>/sessions/<agent>-<id8>.md.
+export const SESSIONS_DIRNAME = 'sessions';
+export const OTHER_SESSIONS_MAX = 2;
+export const OTHER_SESSION_CHARS = 1000;
+export const OTHER_SESSIONS_WINDOW_MS = 48 * 60 * 60 * 1000;
+export function sessionStatusPath(anchor, sid8, env = process.env, agent = AGENT) {
+  return path.join(historyDir(anchor, env), SESSIONS_DIRNAME, `${agent}-${String(sid8).replace(/[^A-Za-z0-9_-]/g, '_')}.md`);
+}
+const HEAD_SID_RE = new RegExp(`^(?:${SESSION_KEYS.map(escRe).join('|')}): ([0-9a-zA-Z_-]{1,8})\\s*$`, 'm');
+function headOf(text) { return text.replace(/\r\n/g, '\n').split('\n\n')[0]; }
+
+// Other sessions' STATUS copies updated within 48h, excluding the session already shown in STATUS.md, newest first, up to 2.
+// A copy whose session equals currentSid8 is tagged "(this session)". '' when there is nothing to show.
+export function otherSessionsBody(anchor, env = process.env, currentSid8 = null, now = Date.now()) {
+  try {
+    const L = t(env);
+    const hdir = historyDir(anchor, env);
+    const sdir = path.join(hdir, SESSIONS_DIRNAME);
+    let names = [];
+    try { names = fs.readdirSync(sdir).filter((n) => n.endsWith('.md')); } catch { return ''; }
+    let statusSid = null;
+    try { const m = HEAD_SID_RE.exec(headOf(fs.readFileSync(path.join(hdir, 'STATUS.md'), 'utf-8'))); statusSid = m ? m[1] : null; } catch { /* none */ }
+    const items = [];
+    for (const n of names) {
+      try {
+        const f = path.join(sdir, n);
+        const st = fs.statSync(f);
+        if (!st.isFile() || now - st.mtimeMs > OTHER_SESSIONS_WINDOW_MS) continue;
+        const text = fs.readFileSync(f, 'utf-8').replace(/\r\n/g, '\n');
+        const head = headOf(text);
+        const sm = HEAD_SID_RE.exec(head);
+        const sid = sm ? sm[1] : null;
+        if (!sid || sid === statusSid) continue;
+        const am = head.match(AUTHOR_RE);
+        items.push({ sid, agent: am ? am[1] : '?', mtime: st.mtimeMs, text });
+      } catch { /* skip file */ }
+    }
+    if (!items.length) return '';
+    items.sort((a, b) => b.mtime - a.mtime);
+    const parts = items.slice(0, OTHER_SESSIONS_MAX).map((it) => {
+      let body = it.text.trim();
+      if (body.length > OTHER_SESSION_CHARS) body = body.slice(0, OTHER_SESSION_CHARS) + '\n' + L.truncated;
+      const mine = !!currentSid8 && it.sid === String(currentSid8).slice(0, 8);
+      return `${L.otherSessionHead(it.sid, it.agent, mine)}\n${body}`;
+    });
+    return `\n\n${L.readerOthers(OTHER_SESSIONS_MAX)}\n${parts.join('\n')}`;
+  } catch {
+    return '';
+  }
+}
+
+// Log retention: <ConfDir>/RETENTION lines `keep=30` · `archive=365` · `sessions=7` (days); env AUTO_HISTORY_KEEP_DAYS / AUTO_HISTORY_ARCHIVE_DAYS / AUTO_HISTORY_SESSIONS_DAYS win.
+// keep=0 → no log archiving or deletion at all. archive=0 → keep .gz forever. sessions=0 → never delete session copies.
+export const RETENTION_DEFAULT = { keep: 30, archive: 365, sessions: 7 };
+export const RETENTION_INTERVAL_MS = 24 * 60 * 60 * 1000;
+export const RETENTION_BATCH_MAX = 20;
+export const RETENTION_MARKER = '.retention';
+export const ARCHIVE_DIRNAME = 'archive';
+export function retentionPolicy(env = process.env) {
+  const out = { ...RETENTION_DEFAULT };
+  const num = (v) => (/^\d{1,5}$/.test(String(v ?? '').trim()) ? parseInt(String(v).trim(), 10) : null);
+  for (const l of readListFile(path.join(getConfDir(env), 'RETENTION')) || []) {
+    const m = /^(keep|archive|sessions)\s*=\s*(\d{1,5})$/i.exec(l);
+    if (m) out[m[1].toLowerCase()] = parseInt(m[2], 10);
+  }
+  const k = num(env.AUTO_HISTORY_KEEP_DAYS); if (k !== null) out.keep = k;
+  const a = num(env.AUTO_HISTORY_ARCHIVE_DAYS); if (a !== null) out.archive = a;
+  const s = num(env.AUTO_HISTORY_SESSIONS_DAYS); if (s !== null) out.sessions = s;
+  return out;
+}
+const LOG_NAME_RE = /^(\d{4})-(\d{2})-(\d{2})\.md$/;
+const GZ_NAME_RE = /^(\d{4})-(\d{2})-(\d{2})\.md\.gz$/;
+function ageDays(y, m, d, now) {
+  const t0 = new Date(Number(y), Number(m) - 1, Number(d)).getTime();
+  return Number.isFinite(t0) ? Math.floor((now - t0) / 86400000) : -1;
+}
+
+// Clean one anchor (called on SessionStart and when the anchor changes). Throttled to once per 24h by a marker file (opts.force ignores it).
+// Today's and yesterday's logs and STATUS.md are never touched.
+// 1) logs whose file-name date is older than `keep` days → archive/<name>.gz (the original is deleted only after a gunzip round-trip matches; at most 20 per run)
+// 2) .gz older than `archive` days are deleted  3) session copies older than `sessions` days are deleted. Returns { ran, archived, deleted, sessionsDeleted }.
+export function runRetention(anchor, env = process.env, opts = {}) {
+  const res = { ran: false, archived: 0, deleted: 0, sessionsDeleted: 0 };
+  try {
+    const hdir = historyDir(anchor, env);
+    if (!fs.existsSync(hdir)) return res;
+    const now = typeof opts.now === 'number' ? opts.now : Date.now();
+    const marker = path.join(hdir, RETENTION_MARKER);
+    if (!opts.force) {
+      try { if (now - fs.statSync(marker).mtimeMs < RETENTION_INTERVAL_MS) return res; } catch { /* no marker → run */ }
+    }
+    res.ran = true;
+    const pol = retentionPolicy(env);
+    const protectedNames = new Set([`${ymd(new Date(now))}.md`, `${ymd(new Date(now - 86400000))}.md`]);
+    const adir = path.join(hdir, ARCHIVE_DIRNAME);
+    if (pol.keep > 0) {
+      let budget = RETENTION_BATCH_MAX;
+      for (const n of fs.readdirSync(hdir).sort()) {
+        if (budget <= 0) break;
+        const m = LOG_NAME_RE.exec(n);
+        if (!m || protectedNames.has(n)) continue;
+        if (ageDays(m[1], m[2], m[3], now) <= pol.keep) continue;
+        const src = path.join(hdir, n);
+        const dst = path.join(adir, `${n}.gz`);
+        try {
+          const raw = fs.readFileSync(src);
+          fs.mkdirSync(adir, { recursive: true });
+          if (!fs.existsSync(dst)) writeAtomic(dst, zlib.gzipSync(raw));
+          const back = zlib.gunzipSync(fs.readFileSync(dst));
+          if (back.equals(raw)) { fs.unlinkSync(src); res.archived += 1; budget -= 1; }
+          else warn(`retention: archive mismatch, kept ${n}`);
+        } catch (e) { warn(`retention: ${n} ${e.message}`); }
+      }
+      if (pol.archive > 0 && fs.existsSync(adir)) {
+        for (const n of fs.readdirSync(adir)) {
+          const m = GZ_NAME_RE.exec(n);
+          if (!m || ageDays(m[1], m[2], m[3], now) <= pol.archive) continue;
+          try { fs.unlinkSync(path.join(adir, n)); res.deleted += 1; } catch { /* ignore */ }
+        }
+      }
+    }
+    if (pol.sessions > 0) {
+      const sdir = path.join(hdir, SESSIONS_DIRNAME);
+      if (fs.existsSync(sdir)) {
+        for (const n of fs.readdirSync(sdir)) {
+          const f = path.join(sdir, n);
+          try {
+            const st = fs.statSync(f);
+            if (st.isFile() && now - st.mtimeMs > pol.sessions * 86400000) { fs.unlinkSync(f); res.sessionsDeleted += 1; }
+          } catch { /* ignore */ }
+        }
+      }
+    }
+    try { fs.writeFileSync(marker, new Date(now).toISOString()); } catch { /* ignore */ }
+  } catch (e) {
+    warn(`retention failed: ${e.message}`);
+  }
+  return res;
+}
+export function retentionLogLine(res, env = process.env) {
+  if (!res || !res.ran || (!res.archived && !res.deleted && !res.sessionsDeleted)) return '';
+  return t(env).logRetention(res.archived, res.deleted, res.sessionsDeleted);
 }
 
 const pad = (n, w = 2) => String(n).padStart(w, '0');

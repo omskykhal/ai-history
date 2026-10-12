@@ -1,6 +1,6 @@
 {
   "name": "ai-history",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "One shared, human-readable work history per project for Claude Code and OpenAI Codex, written automatically by hooks.",
   "type": "module",
   "private": true,

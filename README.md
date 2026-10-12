@@ -100,8 +100,17 @@ The `Stop` hook extracts it and writes `STATUS.md` with a header (`Session`, `Au
 | `▶ [Tool] …` / `✓ [Tool] … (1.2s)` | tool name and a short target (command, file path, pattern, agent description). **Tool output is never logged.** |
 | `[Turn-end] …` | first 300 chars of the reply, or `STATUS updated` |
 | `[anchor] set/changed …` | anchor changes |
+| `[retention] archived N · gz deleted N · session copies deleted N` | written only when a retention run actually moved or deleted something |
 
 API-key-looking strings (`AIza…`, `sk-…`, `ghp_…`, `Bearer …`, `password=…`) are masked before writing.
+
+### Several sessions in one folder
+
+`STATUS.md` always holds the block of the session that finished last. In addition every session's block is kept in `.ai-history/sessions/<agent>-<id8>.md`. When a session starts (or a project is named in a prompt), the Reader injects `STATUS.md` **plus** the other sessions' copies updated in the last 48 hours (newest 2, 1,000 chars each). A copy belonging to the session being resumed is tagged `(this session)`, so a resumed session gets its own state back even if another session overwrote `STATUS.md`. Session copies older than 7 days are removed by the retention run.
+
+### Log retention
+
+Daily logs are kept as plain `YYYY-MM-DD.md` for 30 days. Older files are gzipped into `.ai-history/archive/YYYY-MM-DD.md.gz` (the original is deleted only after a gunzip round-trip matches) and `.gz` files older than 365 days are deleted. The run happens once per 24 hours per project, at session start or when the anchor changes, and never touches today's or yesterday's log or `STATUS.md`. Change the numbers with the `RETENTION` file or `node install.mjs --config --keep-days 60 --archive-days 0`; `keep=0` turns the whole log rotation off.
 
 ### Non-interactive runs
 
@@ -115,6 +124,7 @@ All files live next to the scripts (or in `AUTO_HISTORY_CONF_DIR`). Missing file
 |---|---|
 | `ROOT` / `AUTO_HISTORY_ROOT` | boundary folder (default `~/Projects`) |
 | `LANG` / `AUTO_HISTORY_LANG` | `en` (default) or `ko`: language of injected instructions, STATUS headings and header |
+| `RETENTION` / `AUTO_HISTORY_KEEP_DAYS`, `AUTO_HISTORY_ARCHIVE_DAYS`, `AUTO_HISTORY_SESSIONS_DAYS` | lines `keep=30`, `archive=365`, `sessions=7` (days). `keep=0` disables log rotation, `archive=0` keeps `.gz` forever, `sessions=0` keeps session copies |
 | `ALIASES` | `phrase1\|phrase2 => relative\path\under\root`, one target per line. See `ALIASES.example` |
 | `INTERACTIVE_ENTRYPOINTS` | Claude entrypoints treated as interactive (`cli`) |
 | `NO_BLOCK`, `NO_BLOCK_CODEX` | presence disables the one-time nudge |
@@ -138,13 +148,12 @@ Status: verified once on Windows with `claude --plugin-dir` (2026-10-12: `.ai-hi
 node test/run-tests.mjs <scratch-dir>
 ```
 
-170 cases (hook behaviour, anchor rules, alias/folder matching, STATUS extraction, safety exceptions, installer round-trips, English mode). Test artifacts go to the OS temp dir, never into a real project.
+190 cases (hook behaviour, anchor rules, alias/folder matching, STATUS extraction, safety exceptions, installer round-trips, English mode, log retention, multi-session STATUS). Test artifacts go to the OS temp dir, never into a real project.
 
 ## Known limits
 
 - Windows is the only tested platform.
-- Logs accumulate without rotation (one file per day per project).
-- Two agents writing the same project at the same time interleave in the log; `STATUS.md` is last-writer-wins.
+- Two agents writing the same project at the same time interleave in the log; `STATUS.md` is last-writer-wins (each session's own block survives in `sessions/`, see above).
 - Codex `decision: block` on `Stop` has not been observed in practice (Codex followed the instruction every time during testing).
 
 ## Author / License

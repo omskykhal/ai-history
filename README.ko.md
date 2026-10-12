@@ -100,8 +100,17 @@ node install.mjs --codex-hooks-remove  # Codex 항목만
 | `▶ [도구] …` / `✓ [도구] … (1.2s)` | 도구 이름과 짧은 대상(명령·파일 경로·패턴·에이전트 설명). **도구 출력은 기록하지 않음** |
 | `[Turn-end] …` | 응답 앞 300자, 또는 `STATUS 갱신` |
 | `[anchor] 지정/변경 …` | 앵커 변화 |
+| `[retention] 압축 N·gz 삭제 N·세션 사본 삭제 N` | 보존 정리가 실제로 옮기거나 지운 것이 있을 때만 기록 |
 
 API 키처럼 보이는 문자열(`AIza…`, `sk-…`, `ghp_…`, `Bearer …`, `password=…`)은 쓰기 전에 마스킹합니다.
+
+### 같은 폴더에 세션이 여럿일 때
+
+`STATUS.md` 는 항상 마지막에 끝난 세션의 블록입니다. 그와 별도로 세션마다 자기 블록을 `.ai-history/sessions/<agent>-<id8>.md` 에 남깁니다. 세션 시작(또는 요청문에 프로젝트 언급) 때 Reader 는 `STATUS.md` 에 더해 48시간 안에 갱신된 다른 세션 사본(최신 2개, 각 1,000자)을 함께 주입합니다. 재개한 세션 자신의 사본에는 `(이 세션)` 표시가 붙어, 다른 세션이 `STATUS.md` 를 덮어썼어도 자기 상태를 되찾습니다. 7일 지난 세션 사본은 보존 정리 때 삭제됩니다.
+
+### 로그 보존
+
+일자별 로그 `YYYY-MM-DD.md` 는 30일 동안 원본으로 두고, 그보다 오래된 파일은 `.ai-history/archive/YYYY-MM-DD.md.gz` 로 압축(복원 대조가 일치할 때만 원본 삭제)하며, 365일 지난 `.gz` 는 삭제합니다. 정리는 프로젝트당 24시간에 한 번, 세션 시작 또는 앵커 변경 시에 돌고, 오늘·어제 로그와 `STATUS.md` 는 건드리지 않습니다. 숫자는 `RETENTION` 파일 또는 `node install.mjs --config --keep-days 60 --archive-days 0` 으로 바꾸고, `keep=0` 이면 로그 회전 전체를 끕니다.
 
 ### 비대화형 실행
 
@@ -115,6 +124,7 @@ API 키처럼 보이는 문자열(`AIza…`, `sk-…`, `ghp_…`, `Bearer …`, 
 |---|---|
 | `ROOT` / `AUTO_HISTORY_ROOT` | 경계 폴더(기본 `~/Projects`) |
 | `LANG` / `AUTO_HISTORY_LANG` | `en`(기본) 또는 `ko`: 주입 문구·STATUS 제목·머리말 언어 |
+| `RETENTION` / `AUTO_HISTORY_KEEP_DAYS`, `AUTO_HISTORY_ARCHIVE_DAYS`, `AUTO_HISTORY_SESSIONS_DAYS` | 줄 `keep=30`, `archive=365`, `sessions=7`(일). `keep=0` 로그 회전 끔, `archive=0` `.gz` 영구 보관, `sessions=0` 세션 사본 보존 |
 | `ALIASES` | `문구1\|문구2 => 루트기준\상대경로`, 한 줄에 대상 하나. `ALIASES.example` 참고 |
 | `INTERACTIVE_ENTRYPOINTS` | 대화형으로 볼 Claude 진입점(`cli`) |
 | `NO_BLOCK`, `NO_BLOCK_CODEX` | 있으면 1회 요구 끔 |
@@ -138,13 +148,12 @@ API 키처럼 보이는 문자열(`AIza…`, `sk-…`, `ghp_…`, `Bearer …`, 
 node test/run-tests.mjs <scratch-dir>
 ```
 
-170건(훅 동작·앵커 규칙·별칭/폴더 매칭·STATUS 추출·안전 예외·설치기 왕복·영어 모드). 시험 산출물은 OS 임시 폴더에만 생기고 실제 프로젝트엔 쓰지 않습니다.
+190건(훅 동작·앵커 규칙·별칭/폴더 매칭·STATUS 추출·안전 예외·설치기 왕복·영어 모드·로그 보존·다중 세션 STATUS). 시험 산출물은 OS 임시 폴더에만 생기고 실제 프로젝트엔 쓰지 않습니다.
 
 ## 알려진 한계
 
 - 검증된 플랫폼은 Windows 뿐
-- 로그는 회전 없이 누적(프로젝트당 하루 한 파일)
-- 두 에이전트가 같은 프로젝트를 동시에 쓰면 로그는 섞이고 `STATUS.md` 는 마지막 작성자 우선
+- 두 에이전트가 같은 프로젝트를 동시에 쓰면 로그는 섞이고 `STATUS.md` 는 마지막 작성자 우선(세션별 블록은 `sessions/` 에 남음, 위 절 참고)
 - Codex 의 `Stop` `decision: block` 은 실제 발동을 관찰하지 못함(시험 중 Codex 가 매번 지시를 따름)
 
 ## 제작자 / 라이선스

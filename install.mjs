@@ -5,14 +5,15 @@
 //   node install.mjs --codex-hooks-remove [--codex-file <path>] [--dry-run]                    remove only our entries
 //   node install.mjs --git-ignore [--dry-run]                                                   add ".ai-history/" to git's global excludes file
 //   node install.mjs --migrate-dirname [--root <dir>] [--dry-run]                              rename legacy .claude-history → .ai-history (depth ≤ 2)
-//   node install.mjs --config [--root <dir>] [--lang en|ko]                                     write ROOT / LANG conf files only
+//   node install.mjs --config [--root <dir>] [--lang en|ko] [--keep-days N] [--archive-days N] [--sessions-days N]
+//                                                                                               write ROOT / LANG / RETENTION conf files only
 //   node install.mjs --status                                                                   show the resolved configuration
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { getRoot, getConfDir, lang as resolveLang, historyDirName, DEFAULT_ROOT } from './common.mjs';
+import { getRoot, getConfDir, lang as resolveLang, historyDirName, DEFAULT_ROOT, retentionPolicy } from './common.mjs';
 import { LANGS } from './i18n.mjs';
 
 const HOOK_DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -125,6 +126,19 @@ function applyConfig(args, dry) {
     if (!LANGS.includes(v)) throw new Error(`--lang must be one of: ${LANGS.join(', ')}`);
     out.lang = v;
     if (!dry) out.langFile = writeConf('LANG', v);
+  }
+  // RETENTION (keep / archive / sessions, days; 0 = off). Unspecified keys keep their current (file or default) value.
+  const retArgs = [['--keep-days', 'keep'], ['--archive-days', 'archive'], ['--sessions-days', 'sessions']];
+  if (retArgs.some(([k]) => argVal(args, k) !== null)) {
+    const pol = retentionPolicy({ ...process.env, AUTO_HISTORY_KEEP_DAYS: undefined, AUTO_HISTORY_ARCHIVE_DAYS: undefined, AUTO_HISTORY_SESSIONS_DAYS: undefined });
+    for (const [k, key] of retArgs) {
+      const v = argVal(args, k);
+      if (v === null) continue;
+      if (!/^\d{1,5}$/.test(v)) throw new Error(`${k} must be a whole number of days (0 = off): ${v}`);
+      pol[key] = parseInt(v, 10);
+    }
+    out.retention = pol;
+    if (!dry) out.retentionFile = writeConf('RETENTION', `keep=${pol.keep}\narchive=${pol.archive}\nsessions=${pol.sessions}`);
   }
   return out;
 }
@@ -268,6 +282,7 @@ function status(settingsFile, codexFile) {
     hookDir: HOOK_DIR, confDir,
     root: getRoot(), rootSource: process.env.AUTO_HISTORY_ROOT ? 'env' : has(path.join(confDir, 'ROOT')) ? 'ROOT file' : `default (${DEFAULT_ROOT})`,
     lang: resolveLang(), historyDirName: historyDirName(),
+    retention: retentionPolicy(), retentionSource: has(path.join(confDir, 'RETENTION')) ? 'RETENTION file (+env)' : 'default (+env)',
     aliasesFile: has(path.join(confDir, 'ALIASES')), noBlock: has(path.join(confDir, 'NO_BLOCK')), noBlockCodex: has(path.join(confDir, 'NO_BLOCK_CODEX')),
     claudeSettings: settingsFile, claudeHooksRegistered: countOurs(settingsFile),
     codexHooksFile: codexFile, codexHooksRegistered: countOurs(codexFile),
@@ -311,7 +326,7 @@ function main() {
     '  --codex-hooks-remove [--codex-file <path>] [--dry-run]',
     '  --git-ignore [--dry-run]',
     '  --migrate-dirname [--root <dir>] [--dry-run]',
-    '  --config [--root <dir>] [--lang en|ko]',
+    '  --config [--root <dir>] [--lang en|ko] [--keep-days N] [--archive-days N] [--sessions-days N]',
     '  --status',
   ].join('\n'));
   return undefined;
