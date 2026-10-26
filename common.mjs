@@ -736,7 +736,6 @@ export function maybeDump(event, data, env = process.env, agent = AGENT) {
     const e = {};
     for (const k of keys) e[k] = env[k] === undefined ? null : mask(env[k]);
     if (agent === 'codex') for (const k of Object.keys(env).filter((x) => /^CODEX/i.test(x))) e[k] = mask(String(env[k]));
-    e.CLAUDE_CODE_MESSAGING_TOKEN = env.CLAUDE_CODE_MESSAGING_TOKEN !== undefined ? '(present)' : '(absent)';
     fs.writeFileSync(path.join(dir, `${agent === 'claude' ? '' : `${agent}-`}${event}-${ts}.json`),
       JSON.stringify({ agent, argv: process.argv.slice(2), stdin: maskDeep(data), env: e, processCwd: process.cwd() }, null, 2), 'utf-8');
   } catch (e) {
