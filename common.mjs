@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
-import { getLang, T, statusFormat, ALL_HEADINGS, AUTHOR_KEYS, UPDATED_KEYS, SESSION_KEYS, KW_PROJECT, KW_FOLDER } from './i18n.mjs';
+import { getLang, T, statusFormat, ALL_HEADINGS, AUTHOR_KEYS, UPDATED_KEYS, SESSION_KEYS, RESUME_KEYS, ANCHOR_KEYS, KW_PROJECT, KW_FOLDER } from './i18n.mjs';
 
 export const HOOK_DIR = path.dirname(fileURLToPath(import.meta.url));
 export const IS_WIN = process.platform === 'win32';
@@ -670,10 +670,51 @@ export function historyDirName(env = process.env) {
 }
 export function historyDir(anchor, env = process.env) { return path.join(anchor, historyDirName(env)); }
 
-// STATUS.md header (written in the active language; parsed in every language)
-export function statusHeader(sid8, anchor, env = process.env, agent = AGENT) {
+// Resume command shown after /exit ("claude --resume <id>"), per agent. '' for an unknown agent or an id with spaces/quotes.
+export function resumeCommand(sid, agent = AGENT) {
+  const id = String(sid || '').trim();
+  if (!id || /[\s"'`]/.test(id)) return '';
+  if (agent === 'claude') return `claude --resume ${id}`;
+  if (agent === 'codex') return `codex resume ${id}`;
+  return '';
+}
+
+// STATUS.md header (written in the active language; parsed in every language). Takes the full session id; the Resume line is omitted when there is no command.
+export function statusHeader(sid, anchor, env = process.env, agent = AGENT) {
   const h = t(env).statusHead;
-  return `# STATUS\n${h.session}: ${sid8}\n${h.author}: ${agent} (${sid8})\n${h.updated}: ${stamp()}\n${h.anchor}: ${anchor}\n`;
+  const sid8 = String(sid).slice(0, 8);
+  const cmd = resumeCommand(sid, agent);
+  return `# STATUS\n${h.session}: ${sid8}\n${h.author}: ${agent} (${sid8})\n${h.updated}: ${stamp()}\n${h.anchor}: ${anchor}\n${cmd ? `${h.resume}: ${cmd}\n` : ''}`;
+}
+
+// Insert or update the Resume line in the header block (before the first blank line). Untouched unless the file's Session equals sid8
+// (another session owns it). Keys of every language are recognized; the line is written with the active language's key. Returns whether it changed.
+const RESUME_LINE_RE = new RegExp(`^(?:${RESUME_KEYS.map(escRe).join('|')}): `);
+const ANCHOR_LINE_RE = new RegExp(`^(?:${ANCHOR_KEYS.map(escRe).join('|')}): `);
+export function upsertStatusResume(file, sid8, cmd, env = process.env) {
+  try {
+    if (!cmd || !fs.existsSync(file)) return false;
+    const text = fs.readFileSync(file, 'utf-8').replace(/\r\n/g, '\n');
+    const nl = text.indexOf('\n\n');
+    const head = nl >= 0 ? text.slice(0, nl) : text;
+    const rest = nl >= 0 ? text.slice(nl) : '';
+    const sm = HEAD_SID_RE.exec(head);
+    if (!sm || sm[1] !== String(sid8).slice(0, 8)) return false;
+    const line = `${t(env).statusHead.resume}: ${cmd}`;
+    const lines = head.split('\n');
+    const i = lines.findIndex((l) => RESUME_LINE_RE.test(l));
+    if (i >= 0) {
+      if (lines[i] === line) return false;
+      lines[i] = line;
+    } else {
+      const j = lines.findIndex((l) => ANCHOR_LINE_RE.test(l));
+      lines.splice(j >= 0 ? j + 1 : lines.length, 0, line);
+    }
+    writeAtomic(file, lines.join('\n') + rest);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 // Reader first line: from the STATUS header `Author: <agent> (<id8>)` / `Updated: <time>` → 'Last worker: <agent> · updated <time>'. '' if no author line.

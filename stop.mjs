@@ -140,7 +140,7 @@ runHook(async () => {
     if (st.missing.length) appendLog(anchor, data, L.logIncomplete(st.missing.join(', ')), env);
     try {
       fs.mkdirSync(historyDir(anchor, env), { recursive: true });
-      const content = `${statusHeader(sid8, anchor, env)}\n${st.body}\n`;
+      const content = `${statusHeader(data.session_id, anchor, env)}\n${st.body}\n`;
       writeAtomic(path.join(historyDir(anchor, env), 'STATUS.md'), content);
       // per-session copy (several sessions in one folder): sessions/<agent>-<id8>.md
       const sp17 = sessionStatusPath(anchor, sid8, env);

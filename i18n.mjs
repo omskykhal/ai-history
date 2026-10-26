@@ -10,7 +10,7 @@ const STR = {
   ko: {
     headings: ['하던 일', '한 일', '다음 할 일', '진행도'],
     lines: '(1~5줄)',
-    statusHead: { session: '세션', author: '작성', updated: '갱신', anchor: '앵커' },
+    statusHead: { session: '세션', author: '작성', updated: '갱신', anchor: '앵커', resume: '재개' },
     lastWorker: (agent, t) => `마지막 작업자: ${agent}${t ? ` · 갱신 ${t}` : ''}`,
     readerStatus: '=== STATUS.md ===',
     readerNoStatus: '(STATUS.md 없음)',
@@ -43,11 +43,13 @@ const STR = {
     readerOthers: (n) => `=== 다른 세션 STATUS(48시간 내, 최대 ${n}개) ===`,
     otherSessionHead: (sid, agent, mine) => `--- 세션 ${sid} (${agent})${mine ? ' (이 세션)' : ''} ---`,
     logRetention: (a, d, s) => `[retention] 압축 ${a}·gz 삭제 ${d}·세션 사본 삭제 ${s}`,
+    logExit: (reason, cmd) => `[exit] 종료${reason ? `(reason=${reason})` : ''}${cmd ? ` 재개: ${cmd}` : ''}`,
+    logExitFixed: '[exit] STATUS 재개 줄 보강',
   },
   en: {
     headings: ['Working on', 'Done', 'Next', 'Progress'],
     lines: '(1-5 lines)',
-    statusHead: { session: 'Session', author: 'Author', updated: 'Updated', anchor: 'Anchor' },
+    statusHead: { session: 'Session', author: 'Author', updated: 'Updated', anchor: 'Anchor', resume: 'Resume' },
     lastWorker: (agent, t) => `Last worker: ${agent}${t ? ` · updated ${t}` : ''}`,
     readerStatus: '=== STATUS.md ===',
     readerNoStatus: '(no STATUS.md)',
@@ -80,6 +82,8 @@ const STR = {
     readerOthers: (n) => `=== Other sessions' STATUS (last 48h, up to ${n}) ===`,
     otherSessionHead: (sid, agent, mine) => `--- session ${sid} (${agent})${mine ? ' (this session)' : ''} ---`,
     logRetention: (a, d, s) => `[retention] archived ${a} · gz deleted ${d} · session copies deleted ${s}`,
+    logExit: (reason, cmd) => `[exit] session end${reason ? `(reason=${reason})` : ''}${cmd ? ` resume: ${cmd}` : ''}`,
+    logExitFixed: '[exit] STATUS resume line added',
   },
 };
 
@@ -110,6 +114,8 @@ export const ALL_HEADINGS = LANGS.map((l) => STR[l].headings);
 export const AUTHOR_KEYS = LANGS.map((l) => STR[l].statusHead.author);
 export const UPDATED_KEYS = LANGS.map((l) => STR[l].statusHead.updated);
 export const SESSION_KEYS = LANGS.map((l) => STR[l].statusHead.session);
+export const RESUME_KEYS = LANGS.map((l) => STR[l].statusHead.resume);
+export const ANCHOR_KEYS = LANGS.map((l) => STR[l].statusHead.anchor);
 // Folder-mention keywords (always accepted in every language): "<name> project|folder" / "project|folder <name>".
 export const KW_PROJECT = ['프로젝트', 'project'];
 export const KW_FOLDER = ['폴더', 'folder'];

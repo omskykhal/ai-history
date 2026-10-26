@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.0 — 2026-10-26
+
+- Resume command: the `STATUS.md` header (and the `sessions/` copy) gets a `Resume: claude --resume <id>` / `Resume: codex resume <id>` line after `Anchor` (`재개:` in Korean mode). The line is omitted for an unknown agent or a session id with spaces or quotes.
+- New `SessionEnd` hook (`session-end.mjs`, 6 hooks in total): on `/exit`, `/clear` or logout it logs `[exit] session end(reason=<reason>) resume: <command>` and adds the `Resume` line to this session's `STATUS.md` / `sessions/` copy when it is missing (`[exit] STATUS resume line added`). It uses the anchor already recorded for the session (never picks a new one), only touches a header whose `Session` is this session, and prints nothing.
+- Installer: `--install` and `--codex-hooks` register `SessionEnd` (timeout 5); re-running `--codex-hooks` on an existing file adds it and keeps other handlers. Plugin manifest `hooks/hooks.json` includes it.
+- Tests: 203 cases (+11).
+
 ## 0.2.0 — 2026-10-12
 
 - Log retention: daily logs older than 30 days are gzipped into `.ai-history/archive/`, `.gz` older than 365 days are deleted; runs once per 24h per project (SessionStart / anchor change), never touches today's or yesterday's log or `STATUS.md`. Configure with the `RETENTION` file (`keep` / `archive` / `sessions`), the matching `AUTO_HISTORY_*_DAYS` env vars, or `install.mjs --config --keep-days/--archive-days/--sessions-days`. `keep=0` turns rotation off.

@@ -17,7 +17,7 @@ Close the laptop mid-task, come back tomorrow, open Claude Code *or* Codex from 
 | Item | Requirement |
 |---|---|
 | Node.js | 18 or newer (`node --version`) |
-| Claude Code | hooks support (`SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `Stop`) |
+| Claude Code | hooks support (`SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `Stop`, `SessionEnd`) |
 | OpenAI Codex CLI | 0.160 or newer with `hooks` enabled (`codex features list` → `hooks stable true`), optional |
 | OS | **Windows** (tested). macOS/Linux: path handling is implemented but **untested** |
 
@@ -90,7 +90,7 @@ After any reply in which the agent used a tool, it is instructed to end with:
 <!-- STATUS:END -->
 ```
 
-The `Stop` hook extracts it and writes `STATUS.md` with a header (`Session`, `Author: <agent> (<id>)`, `Updated`, `Anchor`). If the block is missing, the hook asks **once** for it (`decision: block`), never when the stop was caused by a context limit, an interruption, an auth error, a scheduled wake-up, or when context is ≥95% full. Disable the nudge with a `NO_BLOCK` file (Claude) / `NO_BLOCK_CODEX` file (Codex) in the conf dir, or `AUTO_HISTORY_NO_BLOCK=1`.
+The `Stop` hook extracts it and writes `STATUS.md` with a header (`Session`, `Author: <agent> (<id>)`, `Updated`, `Anchor`, `Resume: claude --resume <id>` or `Resume: codex resume <id>`). When the session ends (`/exit`, `/clear`, logout), the `SessionEnd` hook logs `[exit] session end(reason=prompt_input_exit) resume: claude --resume <id>` and adds the `Resume` line to this session's `STATUS.md` / `sessions/` copy if it is missing, so the command to continue the session stays in the history. If the block is missing, the hook asks **once** for it (`decision: block`), never when the stop was caused by a context limit, an interruption, an auth error, a scheduled wake-up, or when context is ≥95% full. Disable the nudge with a `NO_BLOCK` file (Claude) / `NO_BLOCK_CODEX` file (Codex) in the conf dir, or `AUTO_HISTORY_NO_BLOCK=1`.
 
 ### What is logged
 
@@ -100,6 +100,7 @@ The `Stop` hook extracts it and writes `STATUS.md` with a header (`Session`, `Au
 | `▶ [Tool] …` / `✓ [Tool] … (1.2s)` | tool name and a short target (command, file path, pattern, agent description). **Tool output is never logged.** |
 | `[Turn-end] …` | first 300 chars of the reply, or `STATUS updated` |
 | `[anchor] set/changed …` | anchor changes |
+| `[exit] session end(reason=…) resume: …` | session end and the command that resumes it |
 | `[retention] archived N · gz deleted N · session copies deleted N` | written only when a retention run actually moved or deleted something |
 
 API-key-looking strings (`AIza…`, `sk-…`, `ghp_…`, `Bearer …`, `password=…`) are masked before writing.
@@ -148,7 +149,7 @@ Status: verified once on Windows with `claude --plugin-dir` (2026-10-12: `.ai-hi
 node test/run-tests.mjs <scratch-dir>
 ```
 
-192 cases (hook behaviour, anchor rules, alias/folder matching, STATUS extraction, safety exceptions, installer round-trips, English mode, log retention, multi-session STATUS). Test artifacts go to the OS temp dir, never into a real project.
+203 cases (hook behaviour, anchor rules, alias/folder matching, STATUS extraction, safety exceptions, installer round-trips, English mode, log retention, multi-session STATUS, resume command). Test artifacts go to the OS temp dir, never into a real project.
 
 ## Known limits
 

@@ -1,7 +1,7 @@
 // ai-history installer
-//   node install.mjs --install [--root <dir>] [--lang en|ko] [--settings <path>] [--dry-run]   register the 5 hooks in ~/.claude/settings.json
+//   node install.mjs --install [--root <dir>] [--lang en|ko] [--settings <path>] [--dry-run]   register the 6 hooks in ~/.claude/settings.json
 //   node install.mjs --uninstall [--settings <path>] [--dry-run]                               remove only our entries
-//   node install.mjs --codex-hooks [--codex-file <path>] [--dry-run]                           merge our 5 hooks into ~/.codex/hooks.json (--agent codex)
+//   node install.mjs --codex-hooks [--codex-file <path>] [--dry-run]                           merge our 6 hooks into ~/.codex/hooks.json (--agent codex)
 //   node install.mjs --codex-hooks-remove [--codex-file <path>] [--dry-run]                    remove only our entries
 //   node install.mjs --git-ignore [--dry-run]                                                   add ".ai-history/" to git's global excludes file
 //   node install.mjs --migrate-dirname [--root <dir>] [--dry-run]                              rename legacy .claude-history → .ai-history (depth ≤ 2)
@@ -18,7 +18,7 @@ import { LANGS } from './i18n.mjs';
 
 const HOOK_DIR = path.dirname(fileURLToPath(import.meta.url));
 const HOOK_DIR_FWD = HOOK_DIR.replace(/\\/g, '/');
-const SCRIPTS = ['session-start.mjs', 'prompt-submit.mjs', 'pre-tool.mjs', 'post-tool.mjs', 'stop.mjs'];
+const SCRIPTS = ['session-start.mjs', 'prompt-submit.mjs', 'pre-tool.mjs', 'post-tool.mjs', 'stop.mjs', 'session-end.mjs'];
 const cmd = (script) => `node "${HOOK_DIR_FWD}/${script}"`;
 const OUR_HOOKS = {
   SessionStart: { matcher: 'startup|resume|clear|fork', script: 'session-start.mjs', timeout: 5 },
@@ -26,6 +26,7 @@ const OUR_HOOKS = {
   PreToolUse: { matcher: '*', script: 'pre-tool.mjs', timeout: 3 },
   PostToolUse: { matcher: '*', script: 'post-tool.mjs', timeout: 3 },
   Stop: { matcher: '*', script: 'stop.mjs', timeout: 5 },
+  SessionEnd: { matcher: '*', script: 'session-end.mjs', timeout: 5 }, // records the resume command (non-blocking event)
 };
 const OURS_RE = new RegExp(`/ai-history/[^"]*(${SCRIPTS.map((s) => s.replace('.', '\\.')).join('|')})"`, 'i');
 
@@ -171,7 +172,7 @@ function claudeSettings(mode, file, dry) {
 }
 
 // ---- Codex: ~/.codex/hooks.json (merge; other handlers preserved) ----
-const CODEX_TIMEOUTS = { SessionStart: 5, UserPromptSubmit: 3, PreToolUse: 3, PostToolUse: 3, Stop: 5 };
+const CODEX_TIMEOUTS = { SessionStart: 5, UserPromptSubmit: 3, PreToolUse: 3, PostToolUse: 3, Stop: 5, SessionEnd: 5 };
 function addOursCodex(obj) {
   stripOurs(obj);
   if (!obj.hooks || typeof obj.hooks !== 'object') obj.hooks = {};

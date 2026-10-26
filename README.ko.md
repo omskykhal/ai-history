@@ -17,7 +17,7 @@
 | 항목 | 요구 |
 |---|---|
 | Node.js | 18 이상 (`node --version`) |
-| Claude Code | 훅 지원(`SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `Stop`) |
+| Claude Code | 훅 지원(`SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `Stop`, `SessionEnd`) |
 | OpenAI Codex CLI | 0.160 이상, `hooks` 사용 가능(`codex features list` → `hooks stable true`), 선택 |
 | OS | **Windows**(검증됨). macOS/Linux: 경로 처리는 구현돼 있으나 **미검증** |
 
@@ -90,7 +90,7 @@ node install.mjs --codex-hooks-remove  # Codex 항목만
 <!-- STATUS:END -->
 ```
 
-`Stop` 훅이 이걸 뽑아 머리말(`세션`, `작성: <agent> (<id>)`, `갱신`, `앵커`)과 함께 `STATUS.md` 로 씁니다. 블록이 없으면 **한 번만** 다시 요구(`decision: block`)하고, 컨텍스트 한도·사용자 중단·인증 오류·예약 깨우기·컨텍스트 95% 이상일 땐 요구하지 않습니다. 설정 폴더에 `NO_BLOCK`(Claude) / `NO_BLOCK_CODEX`(Codex) 파일을 두거나 `AUTO_HISTORY_NO_BLOCK=1` 로 끌 수 있습니다.
+`Stop` 훅이 이걸 뽑아 머리말(`세션`, `작성: <agent> (<id>)`, `갱신`, `앵커`, `재개: claude --resume <id>` 또는 `재개: codex resume <id>`)과 함께 `STATUS.md` 로 씁니다. 세션이 끝나면(`/exit`·`/clear`·로그아웃) `SessionEnd` 훅이 로그에 `[exit] 종료(reason=prompt_input_exit) 재개: claude --resume <id>` 를 남기고, 이 세션의 `STATUS.md`·`sessions/` 사본에 `재개` 줄이 없으면 보강해 세션을 이어갈 명령이 히스토리에 남습니다. 블록이 없으면 **한 번만** 다시 요구(`decision: block`)하고, 컨텍스트 한도·사용자 중단·인증 오류·예약 깨우기·컨텍스트 95% 이상일 땐 요구하지 않습니다. 설정 폴더에 `NO_BLOCK`(Claude) / `NO_BLOCK_CODEX`(Codex) 파일을 두거나 `AUTO_HISTORY_NO_BLOCK=1` 로 끌 수 있습니다.
 
 ### 무엇이 기록되나
 
@@ -100,6 +100,7 @@ node install.mjs --codex-hooks-remove  # Codex 항목만
 | `▶ [도구] …` / `✓ [도구] … (1.2s)` | 도구 이름과 짧은 대상(명령·파일 경로·패턴·에이전트 설명). **도구 출력은 기록하지 않음** |
 | `[Turn-end] …` | 응답 앞 300자, 또는 `STATUS 갱신` |
 | `[anchor] 지정/변경 …` | 앵커 변화 |
+| `[exit] 종료(reason=…) 재개: …` | 세션 종료와 그 세션을 재개하는 명령 |
 | `[retention] 압축 N·gz 삭제 N·세션 사본 삭제 N` | 보존 정리가 실제로 옮기거나 지운 것이 있을 때만 기록 |
 
 API 키처럼 보이는 문자열(`AIza…`, `sk-…`, `ghp_…`, `Bearer …`, `password=…`)은 쓰기 전에 마스킹합니다.
@@ -148,7 +149,7 @@ API 키처럼 보이는 문자열(`AIza…`, `sk-…`, `ghp_…`, `Bearer …`, 
 node test/run-tests.mjs <scratch-dir>
 ```
 
-192건(훅 동작·앵커 규칙·별칭/폴더 매칭·STATUS 추출·안전 예외·설치기 왕복·영어 모드·로그 보존·다중 세션 STATUS). 시험 산출물은 OS 임시 폴더에만 생기고 실제 프로젝트엔 쓰지 않습니다.
+203건(훅 동작·앵커 규칙·별칭/폴더 매칭·STATUS 추출·안전 예외·설치기 왕복·영어 모드·로그 보존·다중 세션 STATUS·재개 명령). 시험 산출물은 OS 임시 폴더에만 생기고 실제 프로젝트엔 쓰지 않습니다.
 
 ## 알려진 한계
 

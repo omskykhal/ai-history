@@ -1,4 +1,4 @@
-// auto-history 단위 시험 (플랜 v4.1 §5 1~6행 + 변경 2 §14.4 = 7행, 2c (p)~(v), §15 = 8행, 배포 일반화 = 9행, 보존·다중 세션 = 10행). 사용: node run-tests.mjs <scratch-dir> [<설치 전 settings 사본>]
+// auto-history 단위 시험 (플랜 v4.1 §5 1~6행 + 변경 2 §14.4 = 7행, 2c (p)~(v), §15 = 8행, 배포 일반화 = 9행, 보존·다중 세션 = 10행, 재개 명령 = 11행). 사용: node run-tests.mjs <scratch-dir> [<설치 전 settings 사본>]
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -513,12 +513,12 @@ async function main() {
     let o1 = {}; try { o1 = JSON.parse(i1.stdout); } catch { /* */ }
     const afterI = readJson(copy) || {};
     const evs = afterI.hooks ? Object.keys(afterI.hooks) : [];
-    rec(6, 'install', '5 이벤트·hooks 외 키/값 동일·백업 존재', `events=${evs.join(',')} keysEq=${o1.nonHooksKeysEqual} valsEq=${o1.nonHooksValuesEqual} backup=${o1.backup && fs.existsSync(o1.backup)}`,
-      evs.length === 5 && o1.nonHooksValuesEqual === true && o1.backup && fs.existsSync(o1.backup));
+    rec(6, 'install', '6 이벤트·hooks 외 키/값 동일·백업 존재', `events=${evs.join(',')} keysEq=${o1.nonHooksKeysEqual} valsEq=${o1.nonHooksValuesEqual} backup=${o1.backup && fs.existsSync(o1.backup)}`,
+      evs.length === 6 && o1.nonHooksValuesEqual === true && o1.backup && fs.existsSync(o1.backup));
     inst(['--install']);
     const afterI2 = readJson(copy) || {};
     const counts = Object.values(afterI2.hooks || {}).map((g) => g.length);
-    rec(6, '재설치 멱등', '이벤트당 1그룹', counts.join(','), counts.length === 5 && counts.every((c) => c === 1));
+    rec(6, '재설치 멱등', '이벤트당 1그룹', counts.join(','), counts.length === 6 && counts.every((c) => c === 1));
     const u = inst(['--uninstall']);
     const afterU = readJson(copy) || {};
     rec(6, 'install→uninstall 왕복', '키 집합·값 원본과 동일·hooks 키 없음', `equal=${JSON.stringify(afterU) === JSON.stringify(JSON.parse(orig))} hooks=${'hooks' in afterU} code=${u.status}`,
@@ -1048,7 +1048,7 @@ async function main() {
         `dry=${rel(d.wouldRename)}|${rel(d.skippedBoth)} run=${rel(m.renamed)}|${rel(m.skippedBoth)} err=${(m.errors || []).length} again=${(again.renamed || []).length}`,
         dryOk && runOk && (again.renamed || []).length === 0 && rel(again.skippedBoth) === 'both');
     }
-    // (am) --codex-hooks: 임시 경로에만 생성(실제 ~/.codex 미접근), 5 이벤트·--agent codex·절대 경로, 이미 있으면 중단, remove 왕복
+    // (am) --codex-hooks: 임시 경로에만 생성(실제 ~/.codex 미접근), 6 이벤트·--agent codex·절대 경로, 이미 있으면 중단, remove 왕복
     {
       const cf = path.join(SCRATCH, 'codex-home', '.codex', 'hooks.json');
       const env = hostEnv({ AUTO_HISTORY_LANG: 'ko', HOME: path.join(SCRATCH, 'codex-home'), USERPROFILE: path.join(SCRATCH, 'codex-home') });
@@ -1059,8 +1059,8 @@ async function main() {
       const j = readJson(cf) || {};
       const evs = Object.keys(j.hooks || {});
       const hookFwd = HOOK.replace(/\\/g, '/');
-      const scripts = { SessionStart: 'session-start.mjs', UserPromptSubmit: 'prompt-submit.mjs', PreToolUse: 'pre-tool.mjs', PostToolUse: 'post-tool.mjs', Stop: 'stop.mjs' };
-      const handlersOk = evs.length === 5 && evs.every((ev) => {
+      const scripts = { SessionStart: 'session-start.mjs', UserPromptSubmit: 'prompt-submit.mjs', PreToolUse: 'pre-tool.mjs', PostToolUse: 'post-tool.mjs', Stop: 'stop.mjs', SessionEnd: 'session-end.mjs' };
+      const handlersOk = evs.length === 6 && evs.every((ev) => {
         const g = j.hooks[ev];
         if (!Array.isArray(g) || g.length !== 1 || 'matcher' in g[0] || g[0].hooks.length !== 1) return false;
         const h = g[0].hooks[0];
@@ -1081,7 +1081,7 @@ async function main() {
       inst(['--codex-hooks-remove']);
       const left = readJson(cf);
       const realCodex = path.join(os.homedir(), '.codex', 'hooks.json');
-      rec(8, '(am) codex hooks.json 생성', 'dry-run 무생성·5 이벤트·matcher 없음·command=commandWindows=node "<절대경로>/<x>.mjs" --agent codex·재실행 무변경(멱등)·remove 왕복·타 핸들러 보존',
+      rec(8, '(am) codex hooks.json 생성', 'dry-run 무생성·6 이벤트·matcher 없음·command=commandWindows=node "<절대경로>/<x>.mjs" --agent codex·재실행 무변경(멱등)·remove 왕복·타 핸들러 보존',
         `events=${evs.join(',')} handlers=${handlersOk} dry=${dryNoFile} code=${c1.status} exists-stop=${unchanged} removed=${gone} foreignLeft=${JSON.stringify(left)} realPathUsed=${path.resolve(cf) === path.resolve(realCodex)}`,
         dryNoFile && handlersOk && unchanged && gone && JSON.stringify(left) === JSON.stringify(foreign) && path.resolve(cf) !== path.resolve(realCodex));
     }
@@ -1208,9 +1208,9 @@ async function main() {
       const stopGroups = (j.hooks && j.hooks.Stop) || [];
       const r2 = parse(inst(['--codex-hooks']));
       const j2 = readJson(cf) || {};
-      rec(9, '(cx-a) codex hooks.json 병합', '기존 foreign 보존·Stop 2그룹·5 이벤트·백업 생성·재실행 changed=false', `existed=${r1.existed} changed=${r1.changed} backup=${!!(r1.backup && fs.existsSync(r1.backup))} stop=${stopGroups.length} evs=${Object.keys(j.hooks || {}).length} again=${r2.changed} same=${JSON.stringify(j) === JSON.stringify(j2)}`,
+      rec(9, '(cx-a) codex hooks.json 병합', '기존 foreign 보존·Stop 2그룹·6 이벤트·백업 생성·재실행 changed=false', `existed=${r1.existed} changed=${r1.changed} backup=${!!(r1.backup && fs.existsSync(r1.backup))} stop=${stopGroups.length} evs=${Object.keys(j.hooks || {}).length} again=${r2.changed} same=${JSON.stringify(j) === JSON.stringify(j2)}`,
         r1.existed === true && r1.changed === true && r1.backup && fs.existsSync(r1.backup) && stopGroups.length === 2 && stopGroups[0].hooks[0].command === 'echo foreign'
-          && Object.keys(j.hooks).length === 5 && r2.changed === false && JSON.stringify(j) === JSON.stringify(j2));
+          && Object.keys(j.hooks).length === 6 && r2.changed === false && JSON.stringify(j) === JSON.stringify(j2));
     }
   }
 
@@ -1481,6 +1481,189 @@ async function main() {
     {
       const prior = results.filter((x) => x.row <= 9);
       rec(10, '(p) 기존 1~9행 전부 통과', `${prior.length}/${prior.length} PASS`, `${prior.filter((x) => x.pass).length}/${prior.length}`, prior.every((x) => x.pass));
+    }
+  }
+
+  // ---------- 11행 재개 명령(SessionEnd·STATUS 재개 줄) ----------
+  {
+    const CX = ['--agent', 'codex'];
+    const cxEnv = (sid, over = {}) => baseEnv(sid, { CLAUDE_CODE_ENTRYPOINT: undefined, CLAUDE_CODE_SESSION_ID: undefined, ...over });
+    const sessFile = (a, sid, agent = 'claude') => path.join(a, HD, 'sessions', `${agent}-${sid.slice(0, 8)}.md`);
+    const readF = (f) => { try { return fs.readFileSync(f, 'utf-8'); } catch { return null; } };
+    const headLines = (s) => (s || '').replace(/\r\n/g, '\n').split('\n\n')[0].split('\n');
+    const resumeLineOf = (s, key = '재개') => headLines(s).find((l) => l.startsWith(`${key}: `)) || '';
+    const afterAnchor = (s, ak = '앵커', rk = '재개') => { const h = headLines(s); const i = h.findIndex((l) => l.startsWith(`${ak}: `)); return i >= 0 && !!h[i + 1] && h[i + 1].startsWith(`${rk}: `); };
+    const filesIn = (dir) => { try { return fs.readdirSync(dir); } catch { return []; } };
+    const stripTime = (l) => l.replace(/^- \d\d:\d\d:\d\d /, '');
+
+    // (a) resumeCommand·statusHeader 단위: claude/codex 형식, 공백·따옴표 포함 id → '', 모르는 에이전트 → '' (재개 줄 생략)
+    {
+      const sid = '210995b2-050f-4541-853a-78cb521508b5';
+      const hC = C.statusHeader(sid, 'c:/x', process.env, 'claude');
+      const hG = C.statusHeader(sid, 'c:/x', process.env, 'gemini');
+      rec(11, '(a) resumeCommand·statusHeader', 'claude --resume <id> / codex resume <id> / 잘못된 id·모르는 에이전트 빈 문자열·머리에 재개 줄 없음',
+        `${C.resumeCommand(sid, 'claude')} | ${C.resumeCommand(sid, 'codex')} | ${JSON.stringify(C.resumeCommand('a b', 'claude'))} | ${JSON.stringify(C.resumeCommand(sid, 'gemini'))} | hC=${/^재개: claude --resume /m.test(hC)} hG=${/^재개: /m.test(hG)}`,
+        C.resumeCommand(sid, 'claude') === `claude --resume ${sid}` && C.resumeCommand(sid, 'codex') === `codex resume ${sid}`
+        && C.resumeCommand('a b', 'claude') === '' && C.resumeCommand(`${sid}"`, 'claude') === '' && C.resumeCommand(sid, 'gemini') === ''
+        && AC2.test(hC + '\n## 하던 일\n') && new RegExp(`^재개: claude --resume ${sid}$`, 'm').test(hC) && !/^재개: /m.test(hG));
+    }
+    // (b) Stop → STATUS.md·sessions 사본 머리에 `재개: claude --resume <sid>`(앵커 줄 다음), AC-2 정규식 유지, Reader 주입에 포함
+    const aB = P('r19b');
+    const sB = startSession(aB); arm(sB);
+    {
+      run('stop.mjs', { session_id: sB, cwd: aB, last_assistant_message: `끝\n${block('R19')}` }, baseEnv(sB));
+      const s = statusOf(aB) || ''; const c = readF(sessFile(aB, sB)) || '';
+      const want = `재개: claude --resume ${sB}`;
+      const rd = C.readerBody(aB, baseEnv(sB), { sid8: sB.slice(0, 8) });
+      rec(11, '(b) Stop → 재개 줄', 'STATUS·사본 모두 앵커 다음 줄에 재개 명령·AC-2 유지·Reader 포함',
+        `status=${resumeLineOf(s)} copy=${resumeLineOf(c)} afterAnchor=${afterAnchor(s)} ac2=${AC2.test(s)} reader=${rd.includes(want)}`,
+        resumeLineOf(s) === want && resumeLineOf(c) === want && afterAnchor(s) && AC2.test(s) && hasAll4(s) && rd.includes(want));
+    }
+    // (c) SessionEnd(prompt_input_exit): 로그 `[exit] 종료(reason=prompt_input_exit) 재개: claude --resume <sid>`, 재개 줄 이미 있음 → 보강 로그 없음, 출력 없음, 상태 파일 유지
+    {
+      const before = statusOf(aB);
+      const r = run('session-end.mjs', { session_id: sB, cwd: aB, reason: 'prompt_input_exit', hook_event_name: 'SessionEnd' }, baseEnv(sB));
+      const exitLine = logOf(aB).trimEnd().split('\n').filter((l) => l.includes('[exit]'));
+      rec(11, '(c) SessionEnd /exit → 로그', '[exit] 종료(reason=prompt_input_exit) 재개: claude --resume <sid>·보강 로그 없음·STATUS 불변·무출력',
+        `lines=${JSON.stringify(exitLine.map(stripTime))} same=${statusOf(aB) === before} out=${JSON.stringify(r.out)} state=${fs.existsSync(stateFile(sB))}`,
+        exitLine.length === 1 && exitLine[0].endsWith(`[${sB.slice(0, 8)}][claude] [exit] 종료(reason=prompt_input_exit) 재개: claude --resume ${sB}`)
+        && statusOf(aB) === before && r.out === '' && r.code === 0 && fs.existsSync(stateFile(sB)));
+    }
+    // (d) 구형 STATUS(재개 줄 없음, 세션 일치) → SessionEnd 가 앵커 다음에 재개 줄 삽입 + `[exit] STATUS 재개 줄 보강` 로그, 본문 불변. 사본 없음 → 생성하지 않음
+    {
+      const a = P('r19d'); const sid = startSession(a);
+      const h = path.join(a, HD); fs.mkdirSync(h, { recursive: true });
+      const old = `# STATUS\n세션: ${sid.slice(0, 8)}\n작성: claude (${sid.slice(0, 8)})\n갱신: 2026-10-01 00:00:00\n앵커: ${a}\n\n## 하던 일\n- 구형\n## 한 일\n- x\n## 다음 할 일\n- y\n## 진행도\n- z\n`;
+      fs.writeFileSync(path.join(h, 'STATUS.md'), old);
+      run('session-end.mjs', { session_id: sid, cwd: a, reason: 'logout' }, baseEnv(sid));
+      const s = statusOf(a) || '';
+      const bodySame = s.split('\n\n').slice(1).join('\n\n') === old.split('\n\n').slice(1).join('\n\n');
+      const okLog = /\[exit\] STATUS 재개 줄 보강/.test(logOf(a)) && /\(reason=logout\)/.test(logOf(a));
+      rec(11, '(d) 구형 STATUS 보강', '재개 줄 삽입(앵커 다음)·본문 동일·보강 로그·사본 미생성',
+        `line=${resumeLineOf(s)} afterAnchor=${afterAnchor(s)} body=${bodySame} log=${okLog} copy=${fs.existsSync(sessFile(a, sid))}`,
+        resumeLineOf(s) === `재개: claude --resume ${sid}` && afterAnchor(s) && bodySame && okLog && !fs.existsSync(sessFile(a, sid)));
+    }
+    // (e) STATUS 가 다른 세션 소유 → 머리 불변(남의 재개 줄 안 바꿈), 자기 사본만 보강, [exit] 로그는 기록
+    {
+      const a = P('r19e');
+      const s1 = startSession(a); arm(s1);
+      run('stop.mjs', { session_id: s1, cwd: a, last_assistant_message: `끝\n${block('A')}` }, baseEnv(s1));
+      const s2 = startSession(a); arm(s2);
+      run('stop.mjs', { session_id: s2, cwd: a, last_assistant_message: `끝\n${block('B')}` }, baseEnv(s2));
+      // s1 사본의 재개 줄을 지워 보강 대상으로 만듦
+      const c1 = readF(sessFile(a, s1)).split('\n').filter((l) => !l.startsWith('재개: ')).join('\n');
+      fs.writeFileSync(sessFile(a, s1), c1);
+      const statusBefore = statusOf(a);
+      run('session-end.mjs', { session_id: s1, cwd: a, reason: 'prompt_input_exit' }, baseEnv(s1));
+      const c1after = readF(sessFile(a, s1)) || '';
+      const exitLogged = logOf(a).includes(`[${s1.slice(0, 8)}][claude] [exit] 종료(reason=prompt_input_exit)`);
+      rec(11, '(e) 다른 세션 STATUS 보호', 'STATUS.md(세션 s2) 불변·s1 사본만 재개 줄 복원·[exit] 로그 s1',
+        `statusSame=${statusOf(a) === statusBefore} statusLine=${resumeLineOf(statusOf(a))} copy=${resumeLineOf(c1after)} exitLog=${exitLogged}`,
+        statusOf(a) === statusBefore && resumeLineOf(statusOf(a)) === `재개: claude --resume ${s2}` && resumeLineOf(c1after) === `재개: claude --resume ${s1}` && exitLogged);
+    }
+    // (f) 상태 파일 없음(경계 안 cwd 라도) → 파일 생성 없음·무출력 / AUTO_HISTORY_DISABLE=1 → 무기록 / session_id 없음 → 무기록
+    {
+      const a = P('r19f'); fs.mkdirSync(a, { recursive: true });
+      const sid = sidNew();
+      const r1 = run('session-end.mjs', { session_id: sid, cwd: a, reason: 'other' }, baseEnv(sid));
+      const noFiles = filesIn(path.join(a, HD)).length === 0;
+      const sid2 = startSession(a);
+      const logBefore = logOf(a);
+      const r2 = run('session-end.mjs', { session_id: sid2, cwd: a, reason: 'other' }, baseEnv(sid2, { AUTO_HISTORY_DISABLE: '1' }));
+      const r3 = run('session-end.mjs', { cwd: a, reason: 'other' }, baseEnv(sid2));
+      rec(11, '(f) 무상태·DISABLE·id 없음 → 무기록', '히스토리 폴더 없음·로그 불변·무출력·exit 0',
+        `noFiles=${noFiles} logSame=${logOf(a) === logBefore} outs=${JSON.stringify([r1.out, r2.out, r3.out])} codes=${[r1.code, r2.code, r3.code]}`,
+        noFiles && logOf(a) === logBefore && r1.out === '' && r2.out === '' && r3.out === '' && r1.code === 0 && r2.code === 0 && r3.code === 0);
+    }
+    // (g) --agent codex: Stop 머리 `재개: codex resume <sid>`, SessionEnd 로그 [codex] 태그·codex resume, 사본 sessions/codex-<id8>.md
+    {
+      const a = P('r19g'); fs.mkdirSync(a, { recursive: true });
+      const sc = sidNew();
+      run('session-start.mjs', { session_id: sc, source: 'startup', cwd: a }, cxEnv(sc), CX);
+      run('stop.mjs', { session_id: sc, cwd: a, last_assistant_message: `끝\n${block('CX')}` }, cxEnv(sc), CX);
+      const s = statusOf(a) || '';
+      run('session-end.mjs', { session_id: sc, cwd: a, hook_event_name: 'SessionEnd' }, cxEnv(sc), CX);
+      const exitLine = logOf(a).trimEnd().split('\n').filter((l) => l.includes('[exit]'));
+      rec(11, '(g) codex 재개 명령', 'STATUS 재개: codex resume <sid>·사본 동일·로그 [id8][codex] [exit] 종료 재개: codex resume <sid>(reason 없음 → 괄호 없음)',
+        `status=${resumeLineOf(s)} copy=${resumeLineOf(readF(sessFile(a, sc, 'codex')))} exit=${JSON.stringify(exitLine.map(stripTime))}`,
+        resumeLineOf(s) === `재개: codex resume ${sc}` && resumeLineOf(readF(sessFile(a, sc, 'codex'))) === `재개: codex resume ${sc}`
+        && exitLine.length === 1 && exitLine[0].endsWith(`[${sc.slice(0, 8)}][codex] [exit] 종료 재개: codex resume ${sc}`));
+    }
+    // (h) install --install(임시 settings) → 6 이벤트에 SessionEnd(matcher *, session-end.mjs, timeout 5) 포함, 재설치 멱등, uninstall 왕복
+    {
+      const copy = path.join(SCRATCH, 'settings-r19.json');
+      const foreignStop = { Stop: [{ matcher: '*', hooks: [{ type: 'command', command: 'echo foreign' }] }] };
+      fs.writeFileSync(copy, JSON.stringify({ foo: 1, hooks: foreignStop }, null, 2) + '\n');
+      const inst = (args) => spawnSync(process.execPath, [path.join(HOOK, 'install.mjs'), ...args, '--settings', copy], { encoding: 'utf-8', env: hostEnv({ AUTO_HISTORY_LANG: 'ko' }) });
+      inst(['--install']); inst(['--install']);
+      const j = readJson(copy) || {};
+      const se = (j.hooks && j.hooks.SessionEnd) || [];
+      const h = se[0] && se[0].hooks && se[0].hooks[0];
+      const ok = se.length === 1 && se[0].matcher === '*' && !!h && /session-end\.mjs"$/.test(h.command) && h.timeout === 5 && Object.keys(j.hooks).length === 6 && j.hooks.Stop.length === 2;
+      inst(['--uninstall']);
+      const fin = readJson(copy) || {};
+      rec(11, '(h) install → SessionEnd 등록', '6 이벤트·SessionEnd 1그룹 matcher *·session-end.mjs·t5·멱등·uninstall 후 foreign 만',
+        `events=${Object.keys(j.hooks || {}).join(',')} se=${JSON.stringify(se)} fin=${JSON.stringify(fin.hooks)}`,
+        ok && JSON.stringify(fin.hooks) === JSON.stringify(foreignStop));
+    }
+    // (i) --codex-hooks 재실행: 기존 파일(우리 0.2.0 의 5 이벤트 + 타 핸들러) → SessionEnd 추가·타 핸들러 보존·멱등·백업 생성·dry-run 무변경
+    {
+      const cf = path.join(SCRATCH, 'codex-home-r19', '.codex', 'hooks.json');
+      fs.mkdirSync(path.dirname(cf), { recursive: true });
+      const hookFwd = HOOK.replace(/\\/g, '/');
+      const ours = (script, timeout) => ({ hooks: [{ type: 'command', command: `node "${hookFwd}/${script}" --agent codex`, commandWindows: `node "${hookFwd}/${script}" --agent codex`, timeout }] });
+      const foreign = { hooks: [{ type: 'command', command: 'node "C:/x/other-tool/stop.mjs" --agent codex', timeout: 3 }] };
+      const old = { hooks: {
+        SessionStart: [ours('session-start.mjs', 5)], UserPromptSubmit: [ours('prompt-submit.mjs', 3)], PreToolUse: [ours('pre-tool.mjs', 3)],
+        PostToolUse: [ours('post-tool.mjs', 3)], Stop: [foreign, ours('stop.mjs', 5)], SubagentStop: [foreign],
+      } };
+      fs.writeFileSync(cf, JSON.stringify(old, null, 2) + '\n');
+      const inst = (args) => spawnSync(process.execPath, [path.join(HOOK, 'install.mjs'), ...args, '--codex-file', cf], { encoding: 'utf-8', env: hostEnv({ AUTO_HISTORY_LANG: 'ko' }) });
+      const parse = (x) => { try { return JSON.parse(x.stdout); } catch { return {}; } };
+      const before = fs.readFileSync(cf, 'utf-8');
+      const d = inst(['--codex-hooks', '--dry-run']);
+      const dryOk = fs.readFileSync(cf, 'utf-8') === before && d.status === 0;
+      const r1 = parse(inst(['--codex-hooks']));
+      const j1 = readJson(cf) || {};
+      const r2 = parse(inst(['--codex-hooks']));
+      const j2 = readJson(cf) || {};
+      const isOurs = (x) => x && typeof x.command === 'string' && x.command.replace(/\\/g, '/').startsWith(`node "${hookFwd}/`);
+      const oursOf = (j) => Object.values(j.hooks || {}).flat().flatMap((g) => g.hooks || []).filter(isOurs);
+      const se = j1.hooks && j1.hooks.SessionEnd && j1.hooks.SessionEnd[0] && j1.hooks.SessionEnd[0].hooks[0];
+      rec(11, '(i) --codex-hooks 재실행 → SessionEnd 추가', '우리 6개(SessionEnd t5 추가)·타 핸들러(Stop·SubagentStop) 보존·재실행 changed=false·백업·dry-run 무변경',
+        `ours=${oursOf(j1).length}/${oursOf(j2).length} stop=${(j1.hooks && j1.hooks.Stop || []).length} se=${JSON.stringify(se)} changed=${r1.changed}/${r2.changed} backup=${!!r1.backup} dry=${dryOk}`,
+        oursOf(j1).length === 6 && oursOf(j2).length === 6 && JSON.stringify(j1) === JSON.stringify(j2)
+        && j1.hooks.Stop.length === 2 && j1.hooks.Stop[0].hooks[0].command === foreign.hooks[0].command && JSON.stringify(j1.hooks.SubagentStop) === JSON.stringify([foreign])
+        && !!se && se.command === `node "${hookFwd}/session-end.mjs" --agent codex` && se.commandWindows === se.command && se.timeout === 5
+        && r1.changed === true && r2.changed === false && !!r1.backup && fs.existsSync(r1.backup) && dryOk);
+    }
+    // (k) 영어 모드: codex Stop 머리 `Resume: codex resume <sid>`(Anchor 다음), SessionEnd 영어 로그, 영어 구형 머리에 Resume 줄 보강
+    {
+      const a = P('r19k'); fs.mkdirSync(a, { recursive: true });
+      const sc = sidNew();
+      const enEnv = cxEnv(sc, { AUTO_HISTORY_LANG: 'en' });
+      const blk = ['<!-- STATUS:BEGIN -->', '## Working on', '- EN19', '## Done', '- x', '## Next', '- y', '## Progress', '- z', '<!-- STATUS:END -->'].join('\n');
+      run('session-start.mjs', { session_id: sc, source: 'startup', cwd: a }, enEnv, CX);
+      run('stop.mjs', { session_id: sc, cwd: a, last_assistant_message: `done\n${blk}` }, enEnv, CX);
+      const s = statusOf(a) || '';
+      const r = run('session-end.mjs', { session_id: sc, cwd: a, reason: 'prompt_input_exit' }, enEnv, CX);
+      const exitLine = logOf(a).trimEnd().split('\n').filter((l) => l.includes('[exit]'));
+      // 영어 구형 머리(Resume 없음) → upsertStatusResume 이 Anchor 다음에 Resume 줄 삽입, 두 번째 호출은 변경 없음
+      const f = path.join(SCRATCH, 'r19k-old-status.md');
+      fs.writeFileSync(f, `# STATUS\nSession: ${sc.slice(0, 8)}\nAuthor: codex (${sc.slice(0, 8)})\nUpdated: 2026-10-01 00:00:00\nAnchor: ${a}\n\n## Working on\n- old\n`);
+      const u1 = C.upsertStatusResume(f, sc.slice(0, 8), `codex resume ${sc}`, { AUTO_HISTORY_LANG: 'en' });
+      const u2 = C.upsertStatusResume(f, sc.slice(0, 8), `codex resume ${sc}`, { AUTO_HISTORY_LANG: 'en' });
+      const fo = readF(f) || '';
+      rec(11, '(k) 영어 모드 Resume 줄·로그', 'STATUS Resume: codex resume <sid>(Anchor 다음)·로그 [exit] session end(reason=prompt_input_exit) resume: codex resume <sid>·구형 영어 머리 보강 1회·본문 유지',
+        `status=${resumeLineOf(s, 'Resume')} afterAnchor=${afterAnchor(s, 'Anchor', 'Resume')} exit=${JSON.stringify(exitLine.map(stripTime))} out=${JSON.stringify(r.out)} u=${u1}/${u2} old=${resumeLineOf(fo, 'Resume')}`,
+        resumeLineOf(s, 'Resume') === `Resume: codex resume ${sc}` && afterAnchor(s, 'Anchor', 'Resume') && !/^재개: /m.test(s)
+        && exitLine.length === 1 && exitLine[0].endsWith(`[${sc.slice(0, 8)}][codex] [exit] session end(reason=prompt_input_exit) resume: codex resume ${sc}`) && r.out === ''
+        && u1 === true && u2 === false && afterAnchor(fo, 'Anchor', 'Resume') && resumeLineOf(fo, 'Resume') === `Resume: codex resume ${sc}` && fo.endsWith('\n\n## Working on\n- old\n'));
+    }
+    // (j) 기존 1~10행 전부 통과
+    {
+      const prior = results.filter((x) => x.row <= 10);
+      rec(11, '(j) 기존 1~10행 전부 통과', `${prior.length}/${prior.length} PASS`, `${prior.filter((x) => x.pass).length}/${prior.length}`, prior.every((x) => x.pass));
     }
   }
 

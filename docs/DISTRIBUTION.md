@@ -11,7 +11,7 @@
    claude plugin validate .
    ```
    `Validation passed` 가 나와야 합니다. (이 저장소에서는 아직 실행하지 않았습니다.)
-4. **시험**: `node test/run-tests.mjs <scratch-dir>` → `TOTAL 170/170 PASS`.
+4. **시험**: `node test/run-tests.mjs <scratch-dir>` → `TOTAL 203/203 PASS`.
 5. **다른 PC 1대에서 설치 리허설**(가능하면): clone → `install.mjs --install --root … --lang en` → Claude Code 새 세션에서 `[Status]` 보고 확인 → `--codex-hooks` → Codex 에서 확인. Windows 외 OS 는 "미검증"이므로 README 문구를 유지하거나, 리허설 후 문구를 바꾸세요.
 6. **GitHub 저장소 생성 후 push** → Release `v0.1.0` 태그.
 
