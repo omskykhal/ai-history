@@ -66,12 +66,20 @@ function reset() {
 const sidNew = () => crypto.randomUUID();
 const P = (name) => path.join(TEST_ROOT, name);
 
-function baseEnv(sid, over = {}) {
+// Child processes get a minimal environment: only what node and git need to start (paths, temp, home).
+// Nothing else from the parent (tokens, API keys, CLAUDE* / AUTO_HISTORY* settings) is forwarded.
+const HOST_ENV_KEYS = ['PATH', 'PATHEXT', 'SYSTEMROOT', 'WINDIR', 'COMSPEC', 'TEMP', 'TMP', 'TMPDIR',
+  'HOME', 'USERPROFILE', 'HOMEDRIVE', 'HOMEPATH', 'APPDATA', 'LOCALAPPDATA', 'PROGRAMDATA',
+  'USERNAME', 'USER', 'LOGNAME', 'SHELL', 'LANG', 'LC_ALL', 'TZ'];
+function hostEnv(over = {}) {
   const e = {};
-  for (const [k, v] of Object.entries(process.env)) {
-    if (/^CLAUDE/.test(k) || /^AUTO_HISTORY/.test(k) || k === 'AH_NESTED_TEST') continue;
-    e[k] = v;
-  }
+  for (const k of HOST_ENV_KEYS) { const v = process.env[k]; if (v !== undefined) e[k] = v; }
+  for (const [k, v] of Object.entries(over)) { if (v === undefined) delete e[k]; else e[k] = v; }
+  return e;
+}
+
+function baseEnv(sid, over = {}) {
+  const e = hostEnv();
   Object.assign(e, {
     CLAUDE_CODE_ENTRYPOINT: 'cli',
     CLAUDE_CODE_SESSION_ID: sid,
@@ -498,7 +506,7 @@ async function main() {
     if (process.argv[3]) fs.copyFileSync(process.argv[3], copy);
     else fs.writeFileSync(copy, JSON.stringify({ permissions: { allow: ['Read'] }, model: 'test-model' }, null, 2) + '\n');
     const orig = fs.readFileSync(copy, 'utf-8');
-    const inst = (args) => spawnSync(process.execPath, [path.join(HOOK, 'install.mjs'), ...args, '--settings', copy], { encoding: 'utf-8' });
+    const inst = (args) => spawnSync(process.execPath, [path.join(HOOK, 'install.mjs'), ...args, '--settings', copy], { encoding: 'utf-8', env: hostEnv({ AUTO_HISTORY_LANG: 'ko' }) });
     const d = inst(['--install', '--dry-run']);
     rec(6, 'dry-run 무변경', '파일 내용 동일', `same=${fs.readFileSync(copy, 'utf-8') === orig} code=${d.status}`, fs.readFileSync(copy, 'utf-8') === orig && d.status === 0);
     const i1 = inst(['--install']);
@@ -869,7 +877,7 @@ async function main() {
   // ---------- 8행 §15 다중 에이전트(Claude+Codex)·폴더명 .ai-history ----------
   {
     const CX = ['--agent', 'codex'];
-    // codex 환경: Claude 표지(CLAUDE*) 없음. baseEnv 가 process.env 의 CLAUDE* 를 이미 제거함
+    // codex 환경: Claude 표지(CLAUDE*) 없음. baseEnv(hostEnv) 는 부모의 CLAUDE* 를 전달하지 않음
     const cxEnv = (sid, over = {}) => baseEnv(sid, { CLAUDE_CODE_ENTRYPOINT: undefined, CLAUDE_CODE_SESSION_ID: undefined, ...over });
     const runC = (script, input, env) => run(script, input, env, CX);
     const ctxOf = (out) => { try { return JSON.parse(out).hookSpecificOutput.additionalContext || ''; } catch { return ''; } };
@@ -1023,7 +1031,7 @@ async function main() {
       mkH('only', '.claude-history', 'ONLY'); mkH('both', '.claude-history', 'BOTH_OLD'); mkH('both', HD, 'BOTH_NEW');
       mkH(path.join('g', 'deep2'), '.claude-history', 'DEEP2'); mkH(path.join('g', 'x', 'deep3'), '.claude-history', 'DEEP3');
       mkH('.hidden', '.claude-history', 'HIDDEN'); fs.mkdirSync(path.join(RM, 'none'), { recursive: true });
-      const inst = (args) => spawnSync(process.execPath, [path.join(HOOK, 'install.mjs'), ...args], { encoding: 'utf-8', env: { ...process.env, AUTO_HISTORY_DIRNAME: '' } });
+      const inst = (args) => spawnSync(process.execPath, [path.join(HOOK, 'install.mjs'), ...args], { encoding: 'utf-8', env: hostEnv({ AUTO_HISTORY_LANG: 'ko', AUTO_HISTORY_DIRNAME: '' }) });
       const parse = (x) => { try { return JSON.parse(x.stdout); } catch { return {}; } };
       const rel = (arr) => (arr || []).map((d) => path.relative(RM, d)).sort().join(',');
       const ex = (r, dn) => fs.existsSync(path.join(RM, r, dn));
@@ -1043,7 +1051,7 @@ async function main() {
     // (am) --codex-hooks: 임시 경로에만 생성(실제 ~/.codex 미접근), 5 이벤트·--agent codex·절대 경로, 이미 있으면 중단, remove 왕복
     {
       const cf = path.join(SCRATCH, 'codex-home', '.codex', 'hooks.json');
-      const env = { ...process.env, HOME: path.join(SCRATCH, 'codex-home'), USERPROFILE: path.join(SCRATCH, 'codex-home') };
+      const env = hostEnv({ AUTO_HISTORY_LANG: 'ko', HOME: path.join(SCRATCH, 'codex-home'), USERPROFILE: path.join(SCRATCH, 'codex-home') });
       const inst = (args) => spawnSync(process.execPath, [path.join(HOOK, 'install.mjs'), ...args, '--codex-file', cf], { encoding: 'utf-8', env });
       const dry = inst(['--codex-hooks', '--dry-run']);
       const dryNoFile = !fs.existsSync(cf) && dry.status === 0;
@@ -1157,7 +1165,7 @@ async function main() {
     {
       const CONF_R = path.join(SCRATCH, 'conf-root');
       fs.mkdirSync(CONF_R, { recursive: true });
-      const inst = (args) => spawnSync(process.execPath, [path.join(HOOK, 'install.mjs'), ...args], { encoding: 'utf-8', env: { ...process.env, AUTO_HISTORY_CONF_DIR: CONF_R, AUTO_HISTORY_ROOT: '', AUTO_HISTORY_LANG: '' } });
+      const inst = (args) => spawnSync(process.execPath, [path.join(HOOK, 'install.mjs'), ...args], { encoding: 'utf-8', env: hostEnv({ AUTO_HISTORY_CONF_DIR: CONF_R, AUTO_HISTORY_ROOT: '', AUTO_HISTORY_LANG: '' }) });
       const c = inst(['--config', '--root', R9, '--lang', 'ko']);
       const rootFile = fs.existsSync(path.join(CONF_R, 'ROOT')) ? fs.readFileSync(path.join(CONF_R, 'ROOT'), 'utf-8').trim() : '';
       const langFile = fs.existsSync(path.join(CONF_R, 'LANG')) ? fs.readFileSync(path.join(CONF_R, 'LANG'), 'utf-8').trim() : '';
@@ -1176,7 +1184,7 @@ async function main() {
       const GH = path.join(SCRATCH, 'git-home');
       fs.mkdirSync(GH, { recursive: true });
       fs.writeFileSync(path.join(GH, 'gitconfig'), '');
-      const env = { ...process.env, HOME: GH, USERPROFILE: GH, XDG_CONFIG_HOME: path.join(GH, 'xdg'), GIT_CONFIG_GLOBAL: path.join(GH, 'gitconfig') };
+      const env = hostEnv({ AUTO_HISTORY_LANG: 'ko', HOME: GH, USERPROFILE: GH, XDG_CONFIG_HOME: path.join(GH, 'xdg'), GIT_CONFIG_GLOBAL: path.join(GH, 'gitconfig') });
       const inst = (args) => spawnSync(process.execPath, [path.join(HOOK, 'install.mjs'), ...args], { encoding: 'utf-8', env });
       const parse = (x) => { try { return JSON.parse(x.stdout); } catch { return {}; } };
       const d = parse(inst(['--git-ignore', '--dry-run']));
@@ -1193,7 +1201,7 @@ async function main() {
       const cf = path.join(SCRATCH, 'codex2', 'hooks.json');
       fs.mkdirSync(path.dirname(cf), { recursive: true });
       fs.writeFileSync(cf, JSON.stringify({ hooks: { Stop: [{ hooks: [{ type: 'command', command: 'echo foreign' }] }] } }, null, 2));
-      const inst = (args) => spawnSync(process.execPath, [path.join(HOOK, 'install.mjs'), ...args, '--codex-file', cf], { encoding: 'utf-8' });
+      const inst = (args) => spawnSync(process.execPath, [path.join(HOOK, 'install.mjs'), ...args, '--codex-file', cf], { encoding: 'utf-8', env: hostEnv({ AUTO_HISTORY_LANG: 'ko' }) });
       const parse = (x) => { try { return JSON.parse(x.stdout); } catch { return {}; } };
       const r1 = parse(inst(['--codex-hooks']));
       const j = readJson(cf) || {};
@@ -1412,7 +1420,7 @@ async function main() {
     // (r) install --config --keep-days/--archive-days/--sessions-days → RETENTION 파일, --status 에 retention, 잘못된 값 exit 1, dry-run 무변경
     {
       const CONF_R2 = path.join(SCRATCH, 'conf-ret2'); fs.mkdirSync(CONF_R2, { recursive: true });
-      const inst = (args) => spawnSync(process.execPath, [path.join(HOOK, 'install.mjs'), ...args], { encoding: 'utf-8', env: { ...process.env, AUTO_HISTORY_CONF_DIR: CONF_R2, AUTO_HISTORY_ROOT: '', AUTO_HISTORY_LANG: '', AUTO_HISTORY_KEEP_DAYS: '', AUTO_HISTORY_ARCHIVE_DAYS: '', AUTO_HISTORY_SESSIONS_DAYS: '' } });
+      const inst = (args) => spawnSync(process.execPath, [path.join(HOOK, 'install.mjs'), ...args], { encoding: 'utf-8', env: hostEnv({ AUTO_HISTORY_CONF_DIR: CONF_R2, AUTO_HISTORY_ROOT: '', AUTO_HISTORY_LANG: '', AUTO_HISTORY_KEEP_DAYS: '', AUTO_HISTORY_ARCHIVE_DAYS: '', AUTO_HISTORY_SESSIONS_DAYS: '' }) });
       const c1 = inst(['--config', '--keep-days', '60']);
       const f1 = fs.existsSync(path.join(CONF_R2, 'RETENTION')) ? fs.readFileSync(path.join(CONF_R2, 'RETENTION'), 'utf-8') : '';
       const c2 = inst(['--config', '--archive-days', '0']);
@@ -1460,7 +1468,7 @@ async function main() {
     // (t) 리뷰 반영: install --config 가 archive<=keep·값 누락을 거부
     {
       const CONF_R3 = path.join(SCRATCH, 'conf-ret3'); fs.mkdirSync(CONF_R3, { recursive: true });
-      const inst = (args) => spawnSync(process.execPath, [path.join(HOOK, 'install.mjs'), ...args], { encoding: 'utf-8', env: { ...process.env, AUTO_HISTORY_CONF_DIR: CONF_R3, AUTO_HISTORY_ROOT: '', AUTO_HISTORY_LANG: '', AUTO_HISTORY_KEEP_DAYS: '', AUTO_HISTORY_ARCHIVE_DAYS: '', AUTO_HISTORY_SESSIONS_DAYS: '' } });
+      const inst = (args) => spawnSync(process.execPath, [path.join(HOOK, 'install.mjs'), ...args], { encoding: 'utf-8', env: hostEnv({ AUTO_HISTORY_CONF_DIR: CONF_R3, AUTO_HISTORY_ROOT: '', AUTO_HISTORY_LANG: '', AUTO_HISTORY_KEEP_DAYS: '', AUTO_HISTORY_ARCHIVE_DAYS: '', AUTO_HISTORY_SESSIONS_DAYS: '' }) });
       const bad1 = inst(['--config', '--keep-days', '30', '--archive-days', '30']);
       const bad2 = inst(['--config', '--keep-days']);
       const ok1 = inst(['--config', '--keep-days', '30', '--archive-days', '0']);
