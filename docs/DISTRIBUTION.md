@@ -56,7 +56,7 @@ ai-history — one shared work history for Claude Code and Codex, per project
 Problem: I switch between Claude Code and Codex on the same repos, and I close the laptop mid-task. Neither tool's built-in resume knows what the other one did, and after a crash I had to re-explain where I was.
 
 What it does
-- Hooks (SessionStart / UserPromptSubmit / PreToolUse / PostToolUse / Stop) append one line per tool call to <project>/.ai-history/YYYY-MM-DD.md, tagged with the session and the agent: "- 14:02:11 [a1b2c3d4][codex] ▶ [Bash] npm test".
+- Hooks (SessionStart / UserPromptSubmit / PreToolUse / PostToolUse / Stop / SessionEnd) append one line per tool call to <project>/.ai-history/YYYY-MM-DD.md, tagged with the session and the agent: "- 14:02:11 [a1b2c3d4][codex] ▶ [Bash] npm test".
 - At the end of each reply the agent writes a short block (Working on / Done / Next / Progress); the Stop hook saves it to STATUS.md with "Author: claude|codex".
 - On session start, or whenever you mention a project by name ("MyApp project, continue"), the hook injects STATUS.md + the tail of today's and yesterday's log, and the agent opens with a [Status] report that names the last worker.
 - Claude Code and Codex use the same scripts and the same files, so one timeline.
@@ -64,7 +64,7 @@ What it does
 
 Install: git clone, then `node install.mjs --install --root <your projects folder> --lang en`, optionally `--codex-hooks` and `--git-ignore`. Uninstall restores settings from a backup.
 
-Limits (honest): tested on Windows only; macOS/Linux path code exists but is untested. Logs don't rotate. A Claude Code plugin manifest is included but plugin mode is experimental.
+Limits (honest): tested on Windows only; macOS/Linux path code exists but is untested. Logs older than 30 days are gzipped (365-day keep). A Claude Code plugin manifest is included but plugin mode is experimental.
 
 MIT. Feedback welcome, especially from macOS/Linux users.
 https://github.com/omskykhal/ai-history
@@ -77,7 +77,7 @@ ai-history — Claude Code 와 Codex 가 프로젝트마다 하나의 작업 히
 문제: 같은 저장소를 Claude Code 와 Codex 로 번갈아 작업하고, 작업 중에 노트북을 닫는 일이 잦습니다. 두 도구의 내장 resume 은 서로가 뭘 했는지 모르고, 강제 종료 뒤엔 매번 어디까지 했는지 다시 설명해야 했습니다.
 
 하는 일
-- 훅(SessionStart / UserPromptSubmit / PreToolUse / PostToolUse / Stop)이 도구 호출마다 <프로젝트>/.ai-history/YYYY-MM-DD.md 에 한 줄씩 씁니다. 세션과 에이전트 표시 포함: "- 14:02:11 [a1b2c3d4][codex] ▶ [Bash] npm test"
+- 훅(SessionStart / UserPromptSubmit / PreToolUse / PostToolUse / Stop / SessionEnd)이 도구 호출마다 <프로젝트>/.ai-history/YYYY-MM-DD.md 에 한 줄씩 씁니다. 세션과 에이전트 표시 포함: "- 14:02:11 [a1b2c3d4][codex] ▶ [Bash] npm test"
 - 응답 끝에 에이전트가 짧은 블록(하던 일 / 한 일 / 다음 할 일 / 진행도)을 쓰면 Stop 훅이 "작성: claude|codex" 머리말과 함께 STATUS.md 로 저장합니다.
 - 세션 시작 때, 또는 프로젝트 이름을 말할 때("MyApp 프로젝트 이어서") STATUS.md 와 오늘·어제 로그 꼬리를 주입하고, 에이전트는 마지막 작업자를 포함한 [현황] 보고로 시작합니다.
 - Claude Code 와 Codex 가 같은 스크립트·같은 파일을 쓰므로 타임라인이 하나입니다.
@@ -101,7 +101,7 @@ v0.1.0 — first public release
 - STATUS.md written from the agent's end-of-reply block; one safe nudge if it is missing
 - Project selection by alias or "<name> project" mention from any working directory
 - Installer: --install / --uninstall / --codex-hooks / --codex-hooks-remove / --git-ignore / --config / --status
-- en / ko wording, 170 automated tests
+- en / ko wording, 203 automated tests
 - Tested on Windows only; macOS/Linux untested
 ```
 
@@ -113,7 +113,7 @@ v0.1.0 — 첫 공개
 - 응답 끝 블록에서 STATUS.md 생성, 누락 시 안전한 1회 요구
 - 아무 작업 폴더에서나 별칭 또는 "<이름> 프로젝트" 언급으로 프로젝트 선택
 - 설치기: --install / --uninstall / --codex-hooks / --codex-hooks-remove / --git-ignore / --config / --status
-- 영어/한국어 문구, 자동 시험 170건
+- 영어/한국어 문구, 자동 시험 203건
 - Windows 만 검증, macOS/Linux 미검증
 ```
 

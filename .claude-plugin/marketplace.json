@@ -9,7 +9,7 @@
       "name": "ai-history",
       "source": "./",
       "description": "One shared, human-readable work history per project for Claude Code and OpenAI Codex, written automatically by hooks.",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "category": "productivity",
       "tags": [
         "hooks",
