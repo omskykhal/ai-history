@@ -1,6 +1,6 @@
 // PostToolUse hook: log the tool call end (+duration) and arm the "tools were used" marker for the Stop hook.
 import {
-  runHook, readInput, resolveAnchor, appendLog, maybeDump, summarizeTool, statePaths, touchFile,
+  runHook, readInput, resolveAnchor, appendLog, maybeDump, summarizeTool, statePaths, touchFile, isTrackerChangeTool,
 } from './common.mjs';
 
 runHook(async () => {
@@ -14,5 +14,7 @@ runHook(async () => {
   const dur = Number.isFinite(ms) && ms >= 0 ? ` (${(ms / 1000).toFixed(1)}s)` : '';
   appendLog(r.anchor, data, `✓ ${summarizeTool(data)}${dur}`, env);
   if (r.state && !data.agent_id) touchFile(statePaths(data.session_id, env).tool);
+  // tracker change marker (main session; edit under the anchor, or a build / create command)
+  if (r.state && !data.agent_id && isTrackerChangeTool(data, r.anchor, env)) touchFile(statePaths(data.session_id, env).tracker);
   maybeDump('PostToolUse', data, env);
 });

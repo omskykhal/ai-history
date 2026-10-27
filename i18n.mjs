@@ -45,6 +45,65 @@ const STR = {
     logRetention: (a, d, s) => `[retention] 압축 ${a}·gz 삭제 ${d}·세션 사본 삭제 ${s}`,
     logExit: (reason, cmd) => `[exit] 종료${reason ? `(reason=${reason})` : ''}${cmd ? ` 재개: ${cmd}` : ''}`,
     logExitFixed: '[exit] STATUS 재개 줄 보강',
+    // tracker page (§20)
+    trackerFormat: [
+      '<!-- TRACKER:BEGIN -->',
+      '{"project":"한 줄 설명(처음 1회)","areas":[{"id":"A","title":"로그인·계정"}],'
+        + '"items":[{"id":"A-1","area":"A","title":"이메일 로그인","account":"test@example.com / Pass1234!","path":"상단 「로그인」 → 「이메일로 계속」",'
+        + '"todo":"이메일·비밀번호 입력 후 「로그인」 누르기","expect":"대시보드로 이동, 우상단에 닉네임 표시","ai":{"status":"-","note":""}}],'
+        + '"remove":[],"note":""}',
+      '<!-- TRACKER:END -->',
+    ].join('\n'),
+    trackerRules: '문구 규칙: 「할 일」은 화면에 보이는 글자 그대로(「버튼」·옵션 라벨 전체) 쓰고, 항목마다 「계정」에 계정 ID/PASS, 「경로」에 메뉴 경로를 인라인으로 적는다. '
+      + '「정상 기준」은 줄 수·값까지 구체적으로, 쉬운 말로 쓴다. 새 항목은 전부 "사용자 미확인"으로 시작한다(user 필드를 채우지 않는다). '
+      + '모든 키는 선택이며 items 는 id 기준 upsert(없는 필드는 기존 값 유지), 없어진 항목은 remove 에 id, 변경이 없으면 {"items":[]}. '
+      + 'AI 가 직접 검증한 결과는 items[].ai {"status":"ok|fail|-","note":"근거"} 로 적는다. '
+      + '`[현황]`·완료 보고에는 사용자 판정 수치를 그대로 쓰고, 사용자가 ok 로 판정하지 않은 항목을 완료라 하지 마라.',
+    trackerOn: (dirname, file, fmt, rules) => '[auto-history] 이 프로젝트는 트래커(사용자 확인 페이지)가 켜져 있다. 이번 턴에 파일 생성·수정·빌드·배포를 했으면 응답 끝 STATUS 블록 **바로 앞**에 아래 TRACKER 블록(JSON 1개)을 출력하라. '
+      + `훅이 \`${dirname}/${file}\` 에 병합하고 페이지 HTML 을 만든다. 사용자가 직접 확인할 기능마다 항목 1개.\n${fmt}\n${rules}`,
+    trackerOffHint: '[auto-history] 이 프로젝트는 트래커(사용자 확인 페이지)가 꺼져 있다. 사용자가 "트래커 켜줘" 류로 요청할 때만 응답 끝 STATUS 블록 바로 앞에 '
+      + '`<!-- TRACKER:BEGIN -->` / `{"mode":"on"}` / `<!-- TRACKER:END -->` 세 줄 블록을 출력해 켠다.',
+    trackerBlockReason: (beforeStatus, fmt, rules) => '[auto-history] 이번 턴에 파일 생성·수정·빌드가 있었는데 TRACKER 블록이 없습니다. 아래 형식의 TRACKER 블록'
+      + `(변경 없음이면 {"items":[]})을 출력하세요${beforeStatus ? '(STATUS 블록 바로 앞)' : ''}:\n${fmt}\n${rules}`,
+    publishHead: '[auto-history] 트래커 HTML 이 갱신되었습니다. 지금 발행하세요.',
+    publishFirst: (file, title) => `- 처음(url 없음): artifact-capabilities 스킬을 로드한 뒤 Artifact publish — file_path "${file}", icon "checklist", title "${title}", capabilities {"db":{},"user":{}}. 발행 뒤 ArtifactData list \`checks\` 1회로 db 동작 확인.`,
+    publishExisting: (url) => `- 이미 url 있음${url ? `(현재 ${url})` : ''}: 이 세션에서 그 url 을 아직 읽거나 발행하지 않았으면 Artifact read(url) 먼저. 그 다음 같은 file_path + url 로 publish(capabilities 생략). 거부되고 최신본이 오면 그 본문을 쓰지 말고 같은 파일로 1회 재시도(원본은 TRACKER.json).`,
+    publishAfter: '- 발행 뒤 아래만 출력하고 종료:',
+    trackerDbRead: (url) => `[auto-history] 이 프로젝트의 트래커 페이지: ${url} . 답하기 전에 ArtifactData \`list\` 로 컬렉션 \`checks\` 와 \`notes\` 를 **1회** 읽어 `
+      + '`[현황]` 에 `사용자 판정 ok N·fail N·미확인 N·새 메모 N` 을 넣고, fail 항목과 메모는 내용 그대로 보고하라. '
+      + '읽은 판정은 응답 끝 TRACKER 블록 `items[].user` 로 돌려보내라(훅이 저장, 발행 없음). '
+      + 'fail 이거나 메모가 달린 항목은 가능한 범위(라이브 HTTP 대조·정적 검사·빌드)에서 직접 검증해 `items[].ai` 로 보고하라.',
+    trackerTitle: (name) => `${name} 트래커`,
+    trackerNameFallback: '프로젝트',
+    readerTracker: '=== 트래커 ===',
+    readerTrackerUrl: (url, off) => `url: ${url || '미발행'}${off ? ' (트래커 꺼짐)' : ''}`,
+    readerTrackerCounts: (c, sync) => `항목 ${c.n} · AI 정상 ${c.aiOk}·문제 ${c.aiFail}·미검증 ${c.aiNone} · 사용자 정상 ${c.uOk}·문제 ${c.uFail}·미확인 ${c.uNone}(마지막 동기화 ${sync || '없음'})`,
+    readerTrackerPending: (p) => `발행 대기: ${p ? '예' : '아니오'}`,
+    readerTrackerNotes: (lines) => (lines ? `최근 메모:\n${lines}` : '최근 메모: 없음'),
+    logTrackerItems: (a, u, r, userOnly) => `[TRACKER] 항목 +${a} ~${u} -${r}${userOnly ? ' (사용자 판정만)' : ''}`,
+    logTrackerUrl: '[TRACKER] 발행 url 저장',
+    logTrackerJsonError: '[TRACKER] JSON 오류',
+    logTrackerOff: '[TRACKER] 끔',
+    logTrackerIgnored: '[TRACKER] 비활성 프로젝트 블록 무시',
+    logTrackerPublishAsk: '[TRACKER] 발행 요구',
+    logTrackerBlockAsk: '[TRACKER] 블록 요구',
+    logTrackerError: (m) => `[TRACKER] 처리 오류 ${m}`,
+    trackerPage: {
+      kicker: '사용자 확인 트래커', titleFallback: '트래커', updated: '갱신',
+      fAll: '전체', fTodo: '미확인', fFail: '문제',
+      syncConnecting: '연결 중… (이 브라우저에는 저장됨)', syncOn: '공유 저장 연결됨', syncSaved: '공유 저장 연결됨 · 저장됨',
+      syncOff: '공유 저장 연결 안 됨(이 브라우저에만 저장)', syncErr: '공유 저장 오류({code}) · 이 브라우저에는 저장됨',
+      syncFail: '공유 저장 실패({code}) · 이 브라우저에는 저장됨. 이 문구를 Claude 에게 알려 주세요', unknown: '알 수 없음',
+      areas: '영역', itemsN: '항목 {n}', areasN: '영역 {n}', noArea: '영역 없음', otherArea: '기타',
+      tItems: '항목', tUser: '사용자 판정', tAi: 'AI 검증',
+      ok: '정상', fail: '문제', unchecked: '미확인', unverified: '미검증',
+      account: '계정', path: '경로', todo: '할 일', expect: '정상 기준', notWritten: '미기재', noTitle: '(제목 없음)',
+      userPrefix: '사용자', aiLabel: 'AI 검증', judgeLabel: '사용자 판정', notePlaceholder: '메모 (Enter 또는 칸 밖을 누르면 저장)',
+      emptyFilter: '이 필터에 해당하는 항목이 없습니다.', emptyAll: '아직 확인 항목이 없습니다.',
+      memoHead: 'Claude 에게 메모', memoPlaceholder: '확인하면서 Claude 에게 남길 말을 적고 「저장」을 누르세요. 다음 세션에서 Claude 가 읽습니다.',
+      memoSave: '저장', memoEmpty: '메모가 비어 있습니다.', memoSaved: '저장됨(공유)', memoFail: '공유 저장 실패({code}) · 이 브라우저에만 저장됨',
+      memoLocal: '공유 저장 연결 안 됨(이 브라우저에만 저장)', whoClaude: 'Claude', whoMe: '나',
+    },
   },
   en: {
     headings: ['Working on', 'Done', 'Next', 'Progress'],
@@ -84,6 +143,65 @@ const STR = {
     logRetention: (a, d, s) => `[retention] archived ${a} · gz deleted ${d} · session copies deleted ${s}`,
     logExit: (reason, cmd) => `[exit] session end${reason ? `(reason=${reason})` : ''}${cmd ? ` resume: ${cmd}` : ''}`,
     logExitFixed: '[exit] STATUS resume line added',
+    // tracker page (§20)
+    trackerFormat: [
+      '<!-- TRACKER:BEGIN -->',
+      '{"project":"one-line description (first time only)","areas":[{"id":"A","title":"Sign-in and account"}],'
+        + '"items":[{"id":"A-1","area":"A","title":"Email sign-in","account":"test@example.com / Pass1234!","path":"Top bar \'Sign in\' > \'Continue with email\'",'
+        + '"todo":"Enter email and password, press \'Sign in\'","expect":"Dashboard opens, nickname shown top right","ai":{"status":"-","note":""}}],'
+        + '"remove":[],"note":""}',
+      '<!-- TRACKER:END -->',
+    ].join('\n'),
+    trackerRules: 'Wording rules: write "todo" with the exact text shown on screen (full button / option labels), and put the account ID/password in "account" and the menu path in "path" of every item, inline. '
+      + 'Make "expect" concrete (row counts, values) in plain words. Every new item starts as "not checked by the user" (do not fill the user field). '
+      + 'All keys are optional; items are upserted by id (missing fields keep their old value), put ids of removed items in remove, and with no change output {"items":[]}. '
+      + 'Results you verified yourself go in items[].ai {"status":"ok|fail|-","note":"evidence"}. '
+      + 'Use the user verdict counts as they are in `[Status]` and completion reports, and never call an item done that the user has not marked ok.',
+    trackerOn: (dirname, file, fmt, rules) => '[auto-history] The tracker (user check page) is ON for this project. If you created, edited, built or deployed anything this turn, output the TRACKER block below (one JSON object) **right before** the STATUS block at the end of your reply. '
+      + `A hook merges it into \`${dirname}/${file}\` and builds the page HTML. One item per feature the user should check by hand.\n${fmt}\n${rules}`,
+    trackerOffHint: '[auto-history] The tracker (user check page) is OFF for this project. Only when the user asks to turn the tracker on, output the three-line block '
+      + '`<!-- TRACKER:BEGIN -->` / `{"mode":"on"}` / `<!-- TRACKER:END -->` right before the STATUS block at the end of your reply.',
+    trackerBlockReason: (beforeStatus, fmt, rules) => '[auto-history] Files were created, edited or built this turn but there is no TRACKER block. Output a TRACKER block in the format below'
+      + ` ({"items":[]} if nothing changed)${beforeStatus ? ' (right before the STATUS block)' : ''}:\n${fmt}\n${rules}`,
+    publishHead: '[auto-history] The tracker HTML was updated. Publish it now.',
+    publishFirst: (file, title) => `- First time (no url): load the artifact-capabilities skill, then Artifact publish with file_path "${file}", icon "checklist", title "${title}", capabilities {"db":{},"user":{}}. After publishing, run ArtifactData list \`checks\` once to confirm the db works.`,
+    publishExisting: (url) => `- A url already exists${url ? ` (now ${url})` : ''}: if this session has not read or published that url yet, Artifact read(url) first. Then publish the same file_path with that url (omit capabilities). If it is refused and the latest version comes back, do not use that content; retry once with the same file (the source of truth is TRACKER.json).`,
+    publishAfter: '- After publishing, output only this and stop:',
+    trackerDbRead: (url) => `[auto-history] Tracker page of this project: ${url} . Before answering, read the collections \`checks\` and \`notes\` **once** with ArtifactData \`list\`, `
+      + 'put `user verdicts ok N · fail N · unchecked N · new notes N` in `[Status]`, and report fail items and notes word for word. '
+      + 'Send the verdicts you read back in the TRACKER block at the end of your reply as `items[].user` (the hook stores them, no publish). '
+      + 'Verify fail items and items with notes yourself as far as you can (live HTTP check, static checks, build) and report them as `items[].ai`.',
+    trackerTitle: (name) => `${name} tracker`,
+    trackerNameFallback: 'project',
+    readerTracker: '=== Tracker ===',
+    readerTrackerUrl: (url, off) => `url: ${url || 'not published'}${off ? ' (tracker off)' : ''}`,
+    readerTrackerCounts: (c, sync) => `items ${c.n} · AI ok ${c.aiOk} · fail ${c.aiFail} · unverified ${c.aiNone} · user ok ${c.uOk} · fail ${c.uFail} · unchecked ${c.uNone} (last sync ${sync || 'never'})`,
+    readerTrackerPending: (p) => `publish pending: ${p ? 'yes' : 'no'}`,
+    readerTrackerNotes: (lines) => (lines ? `recent notes:\n${lines}` : 'recent notes: none'),
+    logTrackerItems: (a, u, r, userOnly) => `[TRACKER] items +${a} ~${u} -${r}${userOnly ? ' (user verdicts only)' : ''}`,
+    logTrackerUrl: '[TRACKER] published url saved',
+    logTrackerJsonError: '[TRACKER] JSON error',
+    logTrackerOff: '[TRACKER] off',
+    logTrackerIgnored: '[TRACKER] block ignored (tracker inactive)',
+    logTrackerPublishAsk: '[TRACKER] publish requested',
+    logTrackerBlockAsk: '[TRACKER] block requested',
+    logTrackerError: (m) => `[TRACKER] error ${m}`,
+    trackerPage: {
+      kicker: 'USER CHECK TRACKER', titleFallback: 'Tracker', updated: 'Updated',
+      fAll: 'All', fTodo: 'Unchecked', fFail: 'Problems',
+      syncConnecting: 'Connecting… (saved in this browser)', syncOn: 'Shared storage connected', syncSaved: 'Shared storage connected · saved',
+      syncOff: 'Shared storage not connected (saved in this browser only)', syncErr: 'Shared storage error ({code}) · saved in this browser',
+      syncFail: 'Shared save failed ({code}) · saved in this browser. Please tell Claude this message', unknown: 'unknown',
+      areas: 'Areas', itemsN: '{n} items', areasN: '{n} areas', noArea: 'No areas', otherArea: 'Other',
+      tItems: 'Items', tUser: 'User verdict', tAi: 'AI check',
+      ok: 'OK', fail: 'Problem', unchecked: 'Unchecked', unverified: 'Unverified',
+      account: 'Account', path: 'Path', todo: 'To do', expect: 'Expected', notWritten: 'not given', noTitle: '(no title)',
+      userPrefix: 'User', aiLabel: 'AI check', judgeLabel: 'Your verdict', notePlaceholder: 'Note (saved on Enter or when you leave the field)',
+      emptyFilter: 'No items match this filter.', emptyAll: 'No check items yet.',
+      memoHead: 'Note to Claude', memoPlaceholder: 'Write what Claude should know while you check, then press Save. Claude reads it in the next session.',
+      memoSave: 'Save', memoEmpty: 'The note is empty.', memoSaved: 'Saved (shared)', memoFail: 'Shared save failed ({code}) · saved in this browser only',
+      memoLocal: 'Shared storage not connected (saved in this browser only)', whoClaude: 'Claude', whoMe: 'Me',
+    },
   },
 };
 

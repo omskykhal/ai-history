@@ -113,6 +113,29 @@ API-key-looking strings (`AIza…`, `sk-…`, `ghp_…`, `Bearer …`, `password
 
 Daily logs are kept as plain `YYYY-MM-DD.md` for 30 days. Older files are gzipped into `.ai-history/archive/YYYY-MM-DD.md.gz` (the original is deleted only after a gunzip round-trip matches) and `.gz` files are deleted once the log date is more than 365 days old **and** the `.gz` itself has existed for at least `archive − keep` days (so nothing is deleted right after being archived; `archive` must be greater than `keep`, or 0). The run happens once per 24 hours per project, at session start or when the anchor changes, and never touches today's or yesterday's log or `STATUS.md`. Change the numbers with the `RETENTION` file or `node install.mjs --config --keep-days 60 --archive-days 0`; `keep=0` turns the whole log rotation off.
 
+### Tracker page
+
+A per-project checklist page for the things **you** should check by hand (one card per feature: account, menu path, what to do, what "OK" looks like, the AI's own check, and your verdict buttons OK / Problem / Unchecked plus a note).
+
+- **What**: `.ai-history/TRACKER.json` is the source of truth; `.ai-history/tracker/index.html` is built from `tracker-template.html` (no external scripts or fonts, light/dark, phone layout). Page labels follow `AUTO_HISTORY_LANG` (`en` / `ko`).
+- **When**: if a turn created or edited files under the project (or ran a build / deploy / create command), the agent is asked to end its reply with a TRACKER block right before the STATUS block. The `Stop` hook merges it (upsert by `id`, `remove`, auto areas, limits: 300 items, 600 chars per field) and rebuilds the HTML. If the block is missing it asks once (combined with the STATUS nudge, one block per turn).
+- **Publishing** (Claude Code only): when the HTML changed, Claude is asked once to publish it as a private claude.ai Artifact with the `db` and `user` capabilities and to reply with `{"url":"https://claude.ai/artifact/<id>"}`, which is stored. Your verdicts and notes on the page are stored in the Artifact's shared db (`checks/<id>`, `notes`); without it they stay in that browser only. At the next session start Claude is asked to read them once and report them in `[Status]`. Codex merges blocks and builds the HTML but is never asked to publish.
+- **Which projects**: on for projects whose history starts on or after `2026-10-27` (or that have no history yet); older projects stay off until you ask to turn it on (`{"mode":"on"}`). `{"mode":"off"}` turns it off for one project.
+- **Turn off / tune**: a `TRACKER_OFF` file in the conf dir turns it off everywhere (blocks are ignored, nothing is injected). A `TRACKER_SINCE` file (first `YYYY-MM-DD` line) moves the cut-off date.
+
+Block format (every key optional; `{"items":[]}` = no change):
+
+```
+<!-- TRACKER:BEGIN -->
+{"project":"one-line description","areas":[{"id":"A","title":"Sign-in"}],
+ "items":[{"id":"A-1","area":"A","title":"Email sign-in","account":"test@example.com / Pass1234!",
+   "path":"Top bar 'Sign in'","todo":"Press 'Sign in'","expect":"Dashboard opens","ai":{"status":"ok|fail|-","note":"evidence"}}],
+ "remove":[],"note":""}
+<!-- TRACKER:END -->
+```
+
+Note: `TRACKER.json` is not masked, because accounts are meant to be written inline. Use test accounts only. Log lines (`[TRACKER] …`) are masked as usual.
+
 ### Non-interactive runs
 
 `claude -p` / SDK runs (`CLAUDE_CODE_ENTRYPOINT` not in `INTERACTIVE_ENTRYPOINTS`), sub-agents, and a Codex started *inside* a Claude Code session only get the machine log. No injection, no nudge.
@@ -131,6 +154,8 @@ All files live next to the scripts (or in `AUTO_HISTORY_CONF_DIR`). Missing file
 | `NO_BLOCK`, `NO_BLOCK_CODEX` | presence disables the one-time nudge |
 | `NESTED_MARKERS`, `NESTED_MARKERS_CODEX` | `ENV=value` lines; a match means "nested run" → log only |
 | `DUMP_INPUTS`, `DUMP_INPUTS_CODEX` | presence dumps masked hook inputs to `dumps/` (debugging) |
+| `TRACKER_OFF` | presence turns the tracker page off for every project |
+| `TRACKER_SINCE` | first `YYYY-MM-DD` line: projects whose history starts earlier keep the tracker off until asked (default `2026-10-27`) |
 | `AUTO_HISTORY_DIRNAME` | history folder name (default `.ai-history`) |
 | `AUTO_HISTORY_DISABLE=1` | turn everything off for that process (e.g. a daemon) |
 | `AUTO_HISTORY_STATE_DIR` | per-session state files (default `state/` in the conf dir) |
@@ -149,7 +174,7 @@ Status: verified once on Windows with `claude --plugin-dir` (2026-10-12: `.ai-hi
 node test/run-tests.mjs <scratch-dir>
 ```
 
-203 cases (hook behaviour, anchor rules, alias/folder matching, STATUS extraction, safety exceptions, installer round-trips, English mode, log retention, multi-session STATUS, resume command). Test artifacts go to the OS temp dir, never into a real project.
+225 cases (hook behaviour, anchor rules, alias/folder matching, STATUS extraction, safety exceptions, installer round-trips, English mode, log retention, multi-session STATUS, resume command, tracker page). Test artifacts go to the OS temp dir, never into a real project.
 
 ## Known limits
 

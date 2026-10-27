@@ -113,6 +113,29 @@ API 키처럼 보이는 문자열(`AIza…`, `sk-…`, `ghp_…`, `Bearer …`, 
 
 일자별 로그 `YYYY-MM-DD.md` 는 30일 동안 원본으로 두고, 그보다 오래된 파일은 `.ai-history/archive/YYYY-MM-DD.md.gz` 로 압축(복원 대조가 일치할 때만 원본 삭제)하며, 로그 날짜가 365일을 넘고 **동시에** `.gz` 자체가 `archive − keep` 일 이상 존재했을 때만 삭제합니다(압축 직후 삭제되는 일이 없도록, `archive` 는 `keep` 보다 커야 하며 0 이면 영구 보관). 정리는 프로젝트당 24시간에 한 번, 세션 시작 또는 앵커 변경 시에 돌고, 오늘·어제 로그와 `STATUS.md` 는 건드리지 않습니다. 숫자는 `RETENTION` 파일 또는 `node install.mjs --config --keep-days 60 --archive-days 0` 으로 바꾸고, `keep=0` 이면 로그 회전 전체를 끕니다.
 
+### 트래커 페이지
+
+**사용자가** 직접 확인할 것들을 프로젝트마다 모아 두는 확인 페이지입니다(기능마다 카드 1장: 계정·메뉴 경로·할 일·정상 기준·AI 자체 검증, 그리고 판정 버튼 정상/문제/미확인과 메모).
+
+- **무엇을**: 원본은 `.ai-history/TRACKER.json`, 페이지는 `tracker-template.html` 로 만든 `.ai-history/tracker/index.html`(외부 스크립트·글꼴 없음, 라이트/다크, 폰 배치). 페이지 문구는 `AUTO_HISTORY_LANG`(`en`/`ko`)를 따릅니다.
+- **언제**: 한 턴에 프로젝트 안 파일을 만들거나 고쳤으면(또는 빌드·배포·생성 명령을 실행했으면) 응답 끝 STATUS 블록 바로 앞에 TRACKER 블록을 내도록 지시합니다. `Stop` 훅이 병합(`id` 기준 upsert·`remove`·영역 자동 생성·상한 300항목·필드 600자)하고 HTML 을 다시 만듭니다. 블록이 없으면 1회 요구합니다(STATUS 요구와 합쳐 턴당 1회).
+- **발행**(Claude Code 만): HTML 이 바뀌면 Claude 에게 `db`·`user` capability 를 단 비공개 claude.ai Artifact 로 발행하고 `{"url":"https://claude.ai/artifact/<id>"}` 로 답하라고 1회 요구하며, 그 url 을 저장합니다. 페이지에서 누른 판정·메모는 Artifact 공유 db(`checks/<id>`, `notes`)에 저장되고, db 가 없으면 그 브라우저에만 남습니다. 다음 세션 시작 때 Claude 가 이를 1회 읽어 `[현황]` 에 보고하도록 지시합니다. Codex 는 블록 병합·HTML 생성까지만 하고 발행 요구는 받지 않습니다.
+- **대상 프로젝트**: 히스토리가 `2026-10-27` 이후에 시작됐거나 아직 없는 프로젝트는 켜짐, 그보다 오래된 프로젝트는 사용자가 켜 달라고 할 때(`{"mode":"on"}`)까지 꺼짐. `{"mode":"off"}` 는 그 프로젝트만 끕니다.
+- **끄기·조정**: 설정 폴더에 `TRACKER_OFF` 파일이 있으면 전체 끔(블록 무시·주입 없음). `TRACKER_SINCE` 파일(첫 `YYYY-MM-DD` 줄)로 기준 날짜를 바꿉니다.
+
+블록 형식(모든 키 선택, `{"items":[]}` = 변경 없음):
+
+```
+<!-- TRACKER:BEGIN -->
+{"project":"한 줄 설명","areas":[{"id":"A","title":"로그인"}],
+ "items":[{"id":"A-1","area":"A","title":"이메일 로그인","account":"test@example.com / Pass1234!",
+   "path":"상단 「로그인」","todo":"「로그인」 누르기","expect":"대시보드로 이동","ai":{"status":"ok|fail|-","note":"근거"}}],
+ "remove":[],"note":""}
+<!-- TRACKER:END -->
+```
+
+주의: 계정을 인라인으로 적는 용도라 `TRACKER.json` 은 마스킹하지 않습니다. 시험용 계정만 쓰세요. 로그 줄(`[TRACKER] …`)은 평소처럼 마스킹됩니다.
+
 ### 비대화형 실행
 
 `claude -p`·SDK 실행(`CLAUDE_CODE_ENTRYPOINT` 가 `INTERACTIVE_ENTRYPOINTS` 에 없음), 서브에이전트, Claude Code 세션 **안에서** 띄운 Codex 는 기계 로그만 남깁니다. 주입·요구 없음.
@@ -131,6 +154,8 @@ API 키처럼 보이는 문자열(`AIza…`, `sk-…`, `ghp_…`, `Bearer …`, 
 | `NO_BLOCK`, `NO_BLOCK_CODEX` | 있으면 1회 요구 끔 |
 | `NESTED_MARKERS`, `NESTED_MARKERS_CODEX` | `ENV=값` 줄, 일치하면 중첩 실행 → 기록만 |
 | `DUMP_INPUTS`, `DUMP_INPUTS_CODEX` | 있으면 훅 입력(마스킹)을 `dumps/` 에 덤프(디버깅) |
+| `TRACKER_OFF` | 있으면 모든 프로젝트의 트래커 페이지 끔 |
+| `TRACKER_SINCE` | 첫 `YYYY-MM-DD` 줄: 히스토리가 그보다 먼저 시작된 프로젝트는 요청 전까지 트래커 꺼짐(기본 `2026-10-27`) |
 | `AUTO_HISTORY_DIRNAME` | 히스토리 폴더 이름(기본 `.ai-history`) |
 | `AUTO_HISTORY_DISABLE=1` | 그 프로세스에서 전부 끔(데몬 등) |
 | `AUTO_HISTORY_STATE_DIR` | 세션별 상태 파일 위치(기본 설정 폴더의 `state/`) |
@@ -149,7 +174,7 @@ API 키처럼 보이는 문자열(`AIza…`, `sk-…`, `ghp_…`, `Bearer …`, 
 node test/run-tests.mjs <scratch-dir>
 ```
 
-203건(훅 동작·앵커 규칙·별칭/폴더 매칭·STATUS 추출·안전 예외·설치기 왕복·영어 모드·로그 보존·다중 세션 STATUS·재개 명령). 시험 산출물은 OS 임시 폴더에만 생기고 실제 프로젝트엔 쓰지 않습니다.
+225건(훅 동작·앵커 규칙·별칭/폴더 매칭·STATUS 추출·안전 예외·설치기 왕복·영어 모드·로그 보존·다중 세션 STATUS·재개 명령·트래커 페이지). 시험 산출물은 OS 임시 폴더에만 생기고 실제 프로젝트엔 쓰지 않습니다.
 
 ## 알려진 한계
 

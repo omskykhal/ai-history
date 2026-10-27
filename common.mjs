@@ -221,7 +221,7 @@ function safeSid(sid) {
 export function statePaths(sid, env = process.env) {
   const dir = getStateDir(env);
   const s = safeSid(sid);
-  return { dir, json: path.join(dir, `${s}.json`), tool: path.join(dir, `${s}.tool`) };
+  return { dir, json: path.join(dir, `${s}.json`), tool: path.join(dir, `${s}.tool`), tracker: path.join(dir, `${s}.tracker`) };
 }
 export function readState(sid, env = process.env) {
   if (!sid) return null;
@@ -490,6 +490,7 @@ export function readerBody(anchor, env = process.env, opts = {}) {
   const tToday = tailLines(path.join(hdir, `${ymd(today)}.md`), 40);
   const tYday = tailLines(path.join(hdir, `${ymd(yday)}.md`), 20);
   return `\n\n${L.readerStatus}\n${status || L.readerNoStatus}`
+    + trackerReaderSection(anchor, env) // tracker section (only when TRACKER.json exists)
     + otherSessionsBody(anchor, env, opts.sid8)
     + `\n\n${L.readerToday(ymd(today))}\n${tToday || L.readerNone}`
     + `\n\n${L.readerYday(ymd(yday))}\n${tYday || L.readerNone}`;
@@ -812,4 +813,334 @@ export function summarizeTool(data) {
     target = oneLine(String(ti.skill || ''), 200);
   }
   return target ? `[${name}] ${target}` : `[${name}]`;
+}
+
+// ===================== Tracker page (user check page): auto-create / update =====================
+// Per project: <anchor>/<history>/TRACKER.json (source of truth) + tracker/index.html (built from tracker-template.html).
+export const TRACKER_FILE = 'TRACKER.json';
+export const TRACKER_HTML_REL = 'tracker/index.html';
+// Projects whose history starts before this date are "legacy" (tracker off until asked). Override with the TRACKER_SINCE conf file.
+export const TRACKER_SINCE_DEFAULT = '2026-10-27';
+// Shell commands that count as a change (build / deploy / create / write), case-insensitive.
+export const TRACKER_CHANGE_RE = new RegExp([
+  '\\b(?:npm|pnpm|yarn|bun)\\s+(?:run\\s+)?(?:build|deploy|export)\\b',
+  '\\bnext\\s+build\\b', '\\bvite\\s+build\\b', '\\bflutter\\s+build\\b', '\\bfirebase\\s+deploy\\b', '\\bvercel\\b',
+  '\\bwrangler\\s+(?:deploy|publish)\\b', '\\bgcloud\\s+(?:run|app|functions)\\s+deploy\\b', '\\bdocker\\s+(?:build|compose\\s+up)\\b',
+  '\\bsed\\s+-i', '\\btee\\s', '\\bcat\\s*>', '>>', '\\bcp\\s', '\\bmv\\s', '\\bmkdir\\s', '\\bgit\\s+init\\b', '\\bgit\\s+commit\\b',
+  '\\bnpx\\s+create-', '\\bnpm\\s+(?:init|create)\\b', '\\bflutter\\s+create\\b', '\\bSet-Content\\b', '\\bOut-File\\b', '\\bNew-Item\\b',
+].join('|'), 'i');
+export const TRACKER_URL_RE = /^https:\/\/claude\.ai\/artifact\/[A-Za-z0-9_-]{6,}$/;
+export const TRACKER_ID_RE = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,15}$/;
+export const TRACKER_STR_MAX = 600;
+export const TRACKER_ITEMS_MAX = 300;
+export const TRACKER_NOTES_MAX = 50;
+export const TRACKER_READER_MAX = 1200;
+const TRACKER_BEGIN_RE = /^\s*<!-- TRACKER:BEGIN -->\s*$/;
+const TRACKER_END_RE = /^\s*<!-- TRACKER:END -->\s*$/;
+const TRACKER_FENCE_RE = /^\s*(```|~~~)/;
+const TRACKER_EDIT_TOOLS = ['Write', 'Edit', 'MultiEdit', 'NotebookEdit'];
+const TRACKER_SKIP_DIRS = ['.ai-history', '.omc', '.claude', 'node_modules', '.git'];
+
+// Block format / wording rules in the active language (default-env constants kept for direct use).
+export function trackerFormatFor(env = process.env) { return t(env).trackerFormat; }
+export function trackerRulesFor(env = process.env) { return t(env).trackerRules; }
+export const TRACKER_FORMAT = trackerFormatFor();
+export const TRACKER_RULES = trackerRulesFor();
+
+export function trackerPath(anchor, env = process.env) { return path.join(historyDir(anchor, env), TRACKER_FILE); }
+export function trackerHtmlPath(anchor, env = process.env) { return path.join(historyDir(anchor, env), ...TRACKER_HTML_REL.split('/')); }
+
+export function readTracker(anchor, env = process.env) {
+  try {
+    const j = JSON.parse(fs.readFileSync(trackerPath(anchor, env), 'utf-8').replace(/^﻿/, ''));
+    return j && typeof j === 'object' && !Array.isArray(j) ? j : null;
+  } catch {
+    return null;
+  }
+}
+export function writeTracker(anchor, json, env = process.env) {
+  try {
+    fs.mkdirSync(historyDir(anchor, env), { recursive: true });
+    writeAtomic(trackerPath(anchor, env), JSON.stringify(json, null, 2) + '\n');
+  } catch (e) { warn(`tracker write failed: ${e.message}`); }
+}
+
+// TRACKER_SINCE conf file (first YYYY-MM-DD line) || default
+export function trackerSince(env = process.env) {
+  const lines = readListFile(path.join(getConfDir(env), 'TRACKER_SINCE')) || [];
+  const hit = lines.find((l) => /^\d{4}-\d{2}-\d{2}$/.test(l));
+  return hit || TRACKER_SINCE_DEFAULT;
+}
+
+// Earliest date among <history>/YYYY-MM-DD.md and archive/YYYY-MM-DD.md.gz (null when none)
+function earliestHistoryDate(anchor, env) {
+  let min = null;
+  const scan = (dir, re) => {
+    let names = [];
+    try { names = fs.readdirSync(dir); } catch { return; }
+    for (const n of names) {
+      const m = re.exec(n);
+      if (!m) continue;
+      const d = `${m[1]}-${m[2]}-${m[3]}`;
+      if (min === null || d < min) min = d;
+    }
+  };
+  const hdir = historyDir(anchor, env);
+  scan(hdir, LOG_NAME_RE);
+  scan(path.join(hdir, ARCHIVE_DIRNAME), GZ_NAME_RE);
+  return min;
+}
+
+// Eligibility → { mode: on|off|new|legacy, reason, json, anchor }. Global TRACKER_OFF wins, then TRACKER.json, then history age.
+export function trackerEligibility(anchor, env = process.env) {
+  const json = readTracker(anchor, env);
+  if (confFileExists('TRACKER_OFF', env)) return { mode: 'off', reason: 'TRACKER_OFF', json, anchor };
+  if (json) return { mode: json.mode === 'off' ? 'off' : 'on', reason: 'json', json, anchor };
+  const since = trackerSince(env);
+  const first = earliestHistoryDate(anchor, env);
+  if (first && first < since) return { mode: 'legacy', reason: `history ${first} < ${since}`, json: null, anchor };
+  return { mode: 'new', reason: first ? `history ${first} >= ${since}` : 'no-history', json: null, anchor };
+}
+
+// PostToolUse change detection (main session only): edit tools under the anchor (outside skipped folders), shell commands via TRACKER_CHANGE_RE.
+export function isTrackerChangeTool(data, anchor, env = process.env) {
+  try {
+    if (!data || data.agent_id || !anchor) return false;
+    const name = String(data.tool_name || '');
+    const ti = data.tool_input && typeof data.tool_input === 'object' ? data.tool_input : {};
+    if (TRACKER_EDIT_TOOLS.includes(name)) {
+      const p = normalizeWinPath(String(ti.file_path || ti.notebook_path || ''));
+      const a = normalizeWinPath(anchor);
+      if (!p || !a || !p.startsWith(a + SEP)) return false;
+      const segs = p.slice(a.length + 1).split(SEP);
+      const skip = new Set(TRACKER_SKIP_DIRS.concat([historyDirName(env).toLowerCase()]));
+      return !segs.slice(0, -1).some((s) => skip.has(s.toLowerCase()));
+    }
+    if (name === 'Bash' || name === 'PowerShell') return TRACKER_CHANGE_RE.test(String(ti.command || ''));
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+// Last TRACKER:BEGIN~END block of a reply (fence lines dropped). found = a block exists (true even on a JSON error).
+export function extractTracker(msg) {
+  const text = String(msg == null ? '' : msg);
+  const lines = text.replace(/\r\n/g, '\n').split('\n');
+  let b = -1;
+  for (let i = 0; i < lines.length; i++) if (TRACKER_BEGIN_RE.test(lines[i])) b = i;
+  if (b < 0) return { json: null, error: null, rest: text, found: false };
+  let e = -1;
+  for (let i = b + 1; i < lines.length; i++) if (TRACKER_END_RE.test(lines[i])) { e = i; break; }
+  if (e < 0) return { json: null, error: null, rest: text, found: false };
+  const body = lines.slice(b + 1, e).filter((l) => !TRACKER_FENCE_RE.test(l)).join('\n').trim();
+  const rest = lines.slice(0, b).concat(lines.slice(e + 1)).join('\n');
+  try {
+    const j = JSON.parse(body);
+    if (!j || typeof j !== 'object' || Array.isArray(j)) return { json: null, error: 'not-object', rest, found: true };
+    return { json: j, error: null, rest, found: true };
+  } catch (err) {
+    return { json: null, error: String((err && err.message) || 'parse-error').slice(0, 120), rest, found: true };
+  }
+}
+
+const tStr = (v) => (typeof v === 'string' ? v.slice(0, TRACKER_STR_MAX) : null);
+const AI_STATUS = ['ok', 'fail', '-'];
+const USER_STATUS = ['ok', 'fail', ''];
+export function emptyTracker(now = new Date().toISOString()) {
+  return {
+    version: 1, mode: 'on', project: '', url: null, createdAt: now, updatedAt: now, pending: false, publishedAt: null,
+    htmlHash: null, areas: [], items: [], notes: [], userSyncAt: null,
+  };
+}
+// A "no change" note (the allowed form for a turn without changes) is not stored and does not count as a change
+const NO_CHANGE_NOTE_RE = /^\s*(?:변경\s*없음|no\s+changes?)\s*\.?\s*$/i;
+
+// Merge: upsert items by id, remove, auto-create areas, enforce limits. No masking (account ID/password are meant to be inline).
+// changed = project / areas / items (title, account, path, todo, expect, area, ai) / remove / note changed. userOnly = only user verdicts changed.
+export function mergeTracker(json, block, opts = {}) {
+  const now = opts.now || new Date().toISOString();
+  const by = String(opts.by || 'unknown').slice(0, 64);
+  const j = json && typeof json === 'object' ? JSON.parse(JSON.stringify(json)) : emptyTracker(now);
+  if (!Array.isArray(j.areas)) j.areas = [];
+  if (!Array.isArray(j.items)) j.items = [];
+  if (!Array.isArray(j.notes)) j.notes = [];
+  const b = block && typeof block === 'object' && !Array.isArray(block) ? block : {};
+  let changed = false;
+  let userChanged = false;
+  let added = 0;
+  let updated = 0;
+  let removed = 0;
+
+  if (b.mode === 'on' || b.mode === 'off') j.mode = b.mode;
+  const proj = tStr(b.project);
+  if (proj !== null && proj.trim() && proj !== j.project) { j.project = proj; changed = true; }
+
+  const ensureArea = (id, title) => {
+    const a = j.areas.find((x) => x && x.id === id);
+    if (!a) { j.areas.push({ id, title: title || id }); changed = true; return; }
+    if (title && a.title !== title) { a.title = title; changed = true; }
+  };
+  if (Array.isArray(b.areas)) {
+    for (const a of b.areas) {
+      if (!a || typeof a !== 'object' || typeof a.id !== 'string' || !TRACKER_ID_RE.test(a.id)) continue;
+      const tt = tStr(a.title);
+      ensureArea(a.id, tt && tt.trim() ? tt : null);
+    }
+  }
+
+  if (Array.isArray(b.items)) {
+    for (const it of b.items) {
+      if (!it || typeof it !== 'object' || typeof it.id !== 'string' || !TRACKER_ID_RE.test(it.id)) continue;
+      let cur = j.items.find((x) => x && x.id === it.id);
+      let isNew = false;
+      if (!cur) {
+        if (j.items.length >= TRACKER_ITEMS_MAX) continue; // total item cap
+        cur = {
+          id: it.id, area: '', title: '', account: '', path: '', todo: '', expect: '',
+          ai: { status: '-', note: '', at: null }, user: { status: '', note: '', at: null },
+          addedAt: now, updatedAt: now, by,
+        };
+        j.items.push(cur);
+        isNew = true;
+        added += 1;
+        changed = true;
+      }
+      let itemChanged = false;
+      const areaId = typeof it.area === 'string' && TRACKER_ID_RE.test(it.area) ? it.area : (cur.area || it.id.split('-')[0]);
+      if (cur.area !== areaId) { cur.area = areaId; itemChanged = true; }
+      ensureArea(areaId, null);
+      for (const k of ['title', 'account', 'path', 'todo', 'expect']) {
+        const v = tStr(it[k]);
+        if (v !== null && v !== cur[k]) { cur[k] = v; itemChanged = true; }
+      }
+      if (it.ai && typeof it.ai === 'object') {
+        const old = cur.ai && typeof cur.ai === 'object' ? cur.ai : { status: '-', note: '', at: null };
+        const st = AI_STATUS.includes(it.ai.status) ? it.ai.status : '-';
+        const note = tStr(it.ai.note);
+        const nx = { status: st, note: note !== null ? note : (old.note || ''), at: tStr(it.ai.at) || now };
+        if (nx.status !== old.status || nx.note !== (old.note || '')) { cur.ai = nx; itemChanged = true; }
+      }
+      if (it.user && typeof it.user === 'object') {
+        const old = cur.user && typeof cur.user === 'object' ? cur.user : { status: '', note: '', at: null };
+        const st = USER_STATUS.includes(it.user.status) ? it.user.status : '';
+        const note = tStr(it.user.note);
+        const nx = { status: st, note: note !== null ? note : (old.note || ''), at: tStr(it.user.at) || now };
+        if (nx.status !== (old.status || '') || nx.note !== (old.note || '')) { cur.user = nx; userChanged = true; }
+        j.userSyncAt = now;
+      }
+      if (itemChanged) {
+        cur.updatedAt = now;
+        cur.by = by;
+        changed = true;
+        if (!isNew) updated += 1;
+      }
+    }
+  }
+
+  if (Array.isArray(b.remove)) {
+    for (const id of b.remove) {
+      if (typeof id !== 'string') continue;
+      const i = j.items.findIndex((x) => x && x.id === id);
+      if (i >= 0) { j.items.splice(i, 1); removed += 1; changed = true; }
+    }
+  }
+
+  const note = tStr(b.note);
+  if (note !== null && note.trim() && !NO_CHANGE_NOTE_RE.test(note)) {
+    j.notes.push({ at: now, by, text: note });
+    if (j.notes.length > TRACKER_NOTES_MAX) j.notes = j.notes.slice(-TRACKER_NOTES_MAX);
+    changed = true;
+  }
+
+  if (changed) j.updatedAt = now;
+  return { json: j, changed, userOnly: !changed && userChanged, added, updated, removed };
+}
+
+// Project name for the page title: first 20 chars of json.project || anchor folder name || localized fallback
+export function trackerProjectName(json, anchor, env = process.env) {
+  const p = json && typeof json.project === 'string' ? json.project.replace(/\s+/g, ' ').trim() : '';
+  if (p) return p.slice(0, 20);
+  const base = anchor ? path.basename(String(anchor).replace(/[\\/]+$/, '').replace(/\\/g, '/')) : '';
+  return base || t(env).trackerNameFallback;
+}
+
+function trackerCounts(json) {
+  const items = Array.isArray(json && json.items) ? json.items : [];
+  const c = { n: items.length, aiOk: 0, aiFail: 0, aiNone: 0, uOk: 0, uFail: 0, uNone: 0 };
+  for (const it of items) {
+    const a = it && it.ai && it.ai.status;
+    if (a === 'ok') c.aiOk += 1; else if (a === 'fail') c.aiFail += 1; else c.aiNone += 1;
+    const u = it && it.user && it.user.status;
+    if (u === 'ok') c.uOk += 1; else if (u === 'fail') c.uFail += 1; else c.uNone += 1;
+  }
+  return c;
+}
+
+// Reader tracker section (≤1,200 chars). '' when there is no TRACKER.json.
+export function trackerReaderSection(anchor, env = process.env) {
+  try {
+    const j = readTracker(anchor, env);
+    if (!j) return '';
+    const L = t(env);
+    const c = trackerCounts(j);
+    const notes = (Array.isArray(j.notes) ? j.notes : []).slice(-3)
+      .map((x) => `- ${String((x && x.at) || '').slice(0, 16)} ${oneLine((x && x.text) || '', 120)}`);
+    const lines = [
+      L.readerTrackerUrl(j.url, j.mode === 'off'),
+      L.readerTrackerCounts(c, j.userSyncAt),
+      L.readerTrackerPending(!!j.pending),
+      L.readerTrackerNotes(notes.join('\n')),
+    ];
+    let body = `\n\n${L.readerTracker}\n${lines.join('\n')}`;
+    if (body.length > TRACKER_READER_MAX) body = body.slice(0, TRACKER_READER_MAX - L.truncated.length - 1) + '\n' + L.truncated;
+    return body;
+  } catch {
+    return '';
+  }
+}
+
+// Publish procedure (same wording in the Stop block reason and the prompt instruction)
+export function PUBLISH_INSTRUCTION(anchor, json, env = process.env) {
+  const L = t(env);
+  const file = trackerHtmlPath(anchor, env);
+  const title = L.trackerTitle(trackerProjectName(json, anchor, env));
+  const url = json && json.url ? json.url : '';
+  return [
+    L.publishHead,
+    L.publishFirst(file, title),
+    L.publishExisting(url),
+    L.publishAfter,
+    '<!-- TRACKER:BEGIN -->',
+    '{"url":"https://claude.ai/artifact/<id>"}',
+    '<!-- TRACKER:END -->',
+  ].join('\n');
+}
+
+// Session start / project mention: read the page db once (only when a url exists and the tracker is not off, else '')
+export function trackerDbReadInstruction(anchor, env = process.env) {
+  try {
+    if (confFileExists('TRACKER_OFF', env)) return '';
+    const j = readTracker(anchor, env);
+    if (!j || j.mode === 'off' || typeof j.url !== 'string' || !TRACKER_URL_RE.test(j.url)) return '';
+    return t(env).trackerDbRead(j.url);
+  } catch {
+    return '';
+  }
+}
+
+// Prompt instruction (every turn, after the STATUS instruction). on/new → block format + rules, pending ∧ claude → publish procedure,
+// legacy/off → one "how to turn it on" line, global TRACKER_OFF → ''.
+export function trackerInstruction(elig, json, agent = AGENT, anchor = elig && elig.anchor, env = process.env) {
+  try {
+    if (!elig || elig.reason === 'TRACKER_OFF') return '';
+    const L = t(env);
+    if (elig.mode === 'legacy' || elig.mode === 'off') return L.trackerOffHint;
+    const parts = [L.trackerOn(historyDirName(env), TRACKER_FILE, trackerFormatFor(env), trackerRulesFor(env))];
+    const j = json || (elig && elig.json);
+    if (elig.mode === 'on' && j && j.pending && agent === 'claude' && anchor) parts.push(PUBLISH_INSTRUCTION(anchor, j, env));
+    return parts.join('\n\n');
+  } catch {
+    return '';
+  }
 }

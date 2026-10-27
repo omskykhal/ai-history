@@ -3,6 +3,7 @@ import {
   runHook, readInput, emit, resolveAnchor, isInteractive, statePaths, writeState, removeFile, appendLog,
   maybeDump, mask, oneLine, statusFormatFor, listHistoryProjects, listCandidateFolders, loadAliases, matchProjectMention, readerBody, READER_TOTAL_MAX,
   AGENT, historyDirName, lastWorkerLine, t, runRetention, retentionLogLine,
+  trackerEligibility, trackerInstruction, trackerDbReadInstruction,
 } from './common.mjs';
 
 runHook(async () => {
@@ -21,8 +22,9 @@ runHook(async () => {
   if (!r) return;
 
   if (r.state && !data.agent_id) {
-    writeState(data.session_id, { ...r.state, agent: AGENT, promptAt: new Date().toISOString(), blockedAt: null }, env);
+    writeState(data.session_id, { ...r.state, agent: AGENT, promptAt: new Date().toISOString(), blockedAt: null, trackerBlockedAt: null, publishAskedAt: null }, env);
     removeFile(statePaths(data.session_id, env).tool);
+    removeFile(statePaths(data.session_id, env).tracker); // tracker marker has the same lifetime as .tool
   }
 
   const text = raw === undefined ? L.userUnknownField : oneLine(mask(oneLine(raw)), 120);
@@ -33,16 +35,23 @@ runHook(async () => {
 
   // non-interactive / sub-agent / no state → log only
   if (!r.state || !interactive) return;
-  let ctx = INSTRUCTION;
+  // tracker instruction after the STATUS instruction (omitted when empty)
+  const elig = trackerEligibility(r.anchor, env);
+  const tIns = trackerInstruction(elig, elig.json, AGENT, r.anchor, env);
+  const instruction = tIns ? `${INSTRUCTION}\n\n${tIns}` : INSTRUCTION;
+  let ctx = instruction;
   // Inject the Reader only when the named project became the anchor with this prompt (if it already was, instruction only)
   if (hit && r.anchor === hit.anchor && r.previous !== hit.anchor) {
+    const dbRead = hit.recorded === false ? '' : trackerDbReadInstruction(hit.anchor, env);
     let reader = hit.recorded === false
       ? L.mentionUnrecorded(hit.name, hit.dir)
-      : L.mentionRecorded(hit.name, hit.dir) + readerBody(hit.anchor, env, { sid8: String(data.session_id).slice(0, 8) });
+      : L.mentionRecorded(hit.name, hit.dir)
+        + (dbRead ? `\n${dbRead}` : '') // read the tracker page db once (only when it has a url)
+        + readerBody(hit.anchor, env, { sid8: String(data.session_id).slice(0, 8) });
     const lw = hit.recorded === false ? '' : lastWorkerLine(hit.anchor, env);
     if (lw) reader = `[auto-history] ${lw}\n${reader}`;
     if (reader.length > READER_TOTAL_MAX) reader = reader.slice(0, READER_TOTAL_MAX);
-    ctx = `${reader}\n\n${INSTRUCTION}`;
+    ctx = `${reader}\n\n${instruction}`;
   }
   emit({ hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext: ctx } });
 });

@@ -1,4 +1,4 @@
-// auto-history 단위 시험 (플랜 v4.1 §5 1~6행 + 변경 2 §14.4 = 7행, 2c (p)~(v), §15 = 8행, 배포 일반화 = 9행, 보존·다중 세션 = 10행, 재개 명령 = 11행). 사용: node run-tests.mjs <scratch-dir> [<설치 전 settings 사본>]
+// auto-history 단위 시험 (플랜 v4.1 §5 1~6행 + 변경 2 §14.4 = 7행, 2c (p)~(v), §15 = 8행, 배포 일반화 = 9행, 보존·다중 세션 = 10행, 재개 명령 = 11행, 트래커 페이지 = 12행). 사용: node run-tests.mjs <scratch-dir> [<설치 전 settings 사본>]
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -1667,6 +1667,9 @@ async function main() {
     }
   }
 
+  // ---------- 12행 트래커 페이지 자동 생성·갱신 ----------
+  await row12();
+
   // ---------- 결과 ----------
   const esc = (s) => String(s).replace(/\|/g, '\\|').replace(/\r?\n/g, '⏎');
   const rows = results.map((x) => `| ${x.row} | ${esc(x.id)} | \`${esc(x.expect)}\` | ${esc(x.actual)} | ${x.pass ? 'PASS' : 'FAIL'} |`);
@@ -1677,6 +1680,332 @@ async function main() {
   fs.writeFileSync(path.join(SCRATCH, 'results.json'), JSON.stringify(results, null, 2));
   for (const x of results.filter((r) => !r.pass)) console.log(`FAIL [${x.row}] ${x.id} :: expect ${x.expect} :: actual ${x.actual}`);
   console.log(`TOTAL ${pass}/${results.length} PASS -> ${path.join(SCRATCH, 'results.md')}`);
+}
+
+// ---------- 12행: 트래커 페이지(TRACKER 블록·프로젝트별 TRACKER.json·템플릿 빌드) ----------
+async function row12() {
+  const B = await import('../tracker-build.mjs');
+  const CX = ['--agent', 'codex'];
+  const cxEnv = (sid, over = {}) => baseEnv(sid, { CLAUDE_CODE_ENTRYPOINT: undefined, CLAUDE_CODE_SESSION_ID: undefined, ...over });
+  const trFile = (a) => path.join(a, HD, 'TRACKER.json');
+  const htmlFile = (a) => path.join(a, HD, 'tracker', 'index.html');
+  const marker = (sid) => path.join(STATE, `${sid}.tracker`);
+  const reasonOf = (out) => { try { return JSON.parse(out).reason || ''; } catch { return ''; } };
+  const ctxOf = (out) => { try { return JSON.parse(out).hookSpecificOutput.additionalContext || ''; } catch { return ''; } };
+  const tblock = (obj) => `<!-- TRACKER:BEGIN -->\n${JSON.stringify(obj)}\n<!-- TRACKER:END -->`;
+  const stop12 = (sid, a, msg, extra = {}, env = baseEnv(sid)) => run('stop.mjs', { session_id: sid, cwd: a, transcript_path: '', stop_hook_active: false, last_assistant_message: msg, ...extra }, env);
+  const postT = (sid, a, tool, input, extra = {}, env = baseEnv(sid)) => run('post-tool.mjs', { session_id: sid, cwd: a, tool_name: tool, tool_input: input, duration_ms: 5, ...extra }, env);
+  const mkConf = (name, files) => { const d = path.join(SCRATCH, name); fs.mkdirSync(d, { recursive: true }); for (const [n, c] of Object.entries(files)) fs.writeFileSync(path.join(d, n), c); return d; };
+  const CONF_TOFF = mkConf('conf-tracker-off', { INTERACTIVE_ENTRYPOINTS: 'cli\n', TRACKER_OFF: '' });
+  const CONF_TSINCE = mkConf('conf-tracker-since', { INTERACTIVE_ENTRYPOINTS: 'cli\n', TRACKER_SINCE: '# 시험\n2026-09-01\n' });
+  const ITEM = { id: 'A-1', area: 'A', title: '이메일 로그인', account: 'test@x.com / Pass1234!', path: '상단 「로그인」', todo: '「로그인」 누르기', expect: '대시보드 이동', ai: { status: 'ok', note: 'live 200' } };
+
+  // (a) trackerEligibility: 없음→new / SINCE 이전 로그→legacy / gz 만 있어도 legacy / json on·off / TRACKER_OFF / TRACKER_SINCE 파일
+  {
+    const e = { AUTO_HISTORY_CONF_DIR: CONF };
+    const aNew = P('t20a-new'); fs.mkdirSync(aNew, { recursive: true });
+    const aOld = P('t20a-old'); fs.mkdirSync(path.join(aOld, HD), { recursive: true }); fs.writeFileSync(path.join(aOld, HD, '2026-10-01.md'), '- x\n');
+    const aGz = P('t20a-gz'); fs.mkdirSync(path.join(aGz, HD, 'archive'), { recursive: true }); fs.writeFileSync(path.join(aGz, HD, 'archive', '2026-09-01.md.gz'), 'x');
+    const aToday = P('t20a-today'); fs.mkdirSync(path.join(aToday, HD), { recursive: true }); fs.writeFileSync(path.join(aToday, HD, `${today()}.md`), '- x\n');
+    const aOn = P('t20a-on'); fs.mkdirSync(path.join(aOn, HD), { recursive: true }); fs.writeFileSync(trFile(aOn), JSON.stringify({ mode: 'on' }));
+    fs.writeFileSync(path.join(aOn, HD, '2026-01-01.md'), '- 오래된 로그라도 json 이 우선\n');
+    const aOff = P('t20a-off'); fs.mkdirSync(path.join(aOff, HD), { recursive: true }); fs.writeFileSync(trFile(aOff), JSON.stringify({ mode: 'off' }));
+    const aMid = P('t20a-mid'); fs.mkdirSync(path.join(aMid, HD), { recursive: true }); fs.writeFileSync(path.join(aMid, HD, '2026-09-15.md'), '- x\n');
+    const m = (a, env = e) => C.trackerEligibility(a, env).mode;
+    const got = [m(aNew), m(aOld), m(aGz), m(aToday), m(aOn), m(aOff), m(aNew, { AUTO_HISTORY_CONF_DIR: CONF_TOFF }), m(aMid), m(aMid, { AUTO_HISTORY_CONF_DIR: CONF_TSINCE })];
+    const want = ['new', 'legacy', 'legacy', 'new', 'on', 'off', 'off', 'legacy', 'new'];
+    rec(12, '(a) trackerEligibility', want.join(','), `${got.join(',')} since=${C.trackerSince(e)}/${C.trackerSince({ AUTO_HISTORY_CONF_DIR: CONF_TSINCE })}`,
+      got.join(',') === want.join(',') && C.TRACKER_SINCE_DEFAULT === '2026-10-27' && C.trackerSince(e) === '2026-10-27' && C.trackerSince({ AUTO_HISTORY_CONF_DIR: CONF_TSINCE }) === '2026-09-01');
+  }
+
+  // (b) PostToolUse 마커: Edit 앵커 안→touch, .ai-history 안→no, Bash 빌드→touch, Read→no, 서브에이전트→no / TRACKER_CHANGE_RE 단위
+  {
+    const a = P('t20b'); const sid = startSession(a);
+    const step = (tool, input, extra) => { fs.rmSync(marker(sid), { force: true }); postT(sid, a, tool, input, extra); return fs.existsSync(marker(sid)); };
+    const got = {
+      editIn: step('Edit', { file_path: path.join(a, 'src', 'app.ts') }),
+      editHist: step('Edit', { file_path: path.join(a, HD, 'note.md') }),
+      editNm: step('Write', { file_path: path.join(a, 'node_modules', 'x', 'i.js') }),
+      editOut: step('Write', { file_path: path.join(OUTSIDE, 'x.ts') }),
+      bashBuild: step('Bash', { command: 'npm run build' }),
+      bashLs: step('Bash', { command: 'ls -la' }),
+      read: step('Read', { file_path: path.join(a, 'src', 'app.ts') }),
+      sub: step('Edit', { file_path: path.join(a, 'src', 'app.ts') }, { agent_id: 'agent-123', agent_type: 'executor' }),
+      nb: step('NotebookEdit', { notebook_path: path.join(a, 'n.ipynb') }),
+    };
+    const wantB = { editIn: true, editHist: false, editNm: false, editOut: false, bashBuild: true, bashLs: false, read: false, sub: false, nb: true };
+    rec(12, '(b) PostToolUse .tracker 마커', JSON.stringify(wantB), JSON.stringify(got), JSON.stringify(got) === JSON.stringify(wantB));
+    const yes = ['firebase deploy --only hosting', 'pnpm build', 'next build', 'docker compose up -d', 'git commit -m x', 'echo a >> f.txt', 'Set-Content -Path a.txt -Value 1', 'npx create-next-app x', 'gcloud run deploy svc', 'WRANGLER DEPLOY'];
+    const no = ['git status', 'ls -la', 'npm test', 'cat README.md', 'node --check a.mjs', 'scp a b'];
+    const bad = yes.filter((s) => !C.TRACKER_CHANGE_RE.test(s)).concat(no.filter((s) => C.TRACKER_CHANGE_RE.test(s)));
+    rec(12, '(b) TRACKER_CHANGE_RE', '빌드·배포·생성 명령 참 / 조회 명령 거짓', `오판=${JSON.stringify(bad)}`, bad.length === 0);
+  }
+
+  // (c) extractTracker: 정상·JSON 오류·STATUS 공존·rest 에서 제거·펜스 줄 제외·마지막 블록
+  {
+    const m1 = `본문\n${tblock({ items: [ITEM] })}\n${block('C1')}`;
+    const x1 = C.extractTracker(m1);
+    const ok1 = x1.found && x1.json && x1.json.items[0].id === 'A-1' && !x1.error && !/TRACKER:/.test(x1.rest) && /STATUS:BEGIN/.test(x1.rest) && /^본문/.test(x1.rest);
+    const x2 = C.extractTracker('a\n<!-- TRACKER:BEGIN -->\n{"items":[\n<!-- TRACKER:END -->');
+    const ok2 = x2.found && x2.json === null && !!x2.error;
+    const x3 = C.extractTracker(`${tblock({ note: '처음' })}\n<!-- TRACKER:BEGIN -->\n\`\`\`json\n{"note":"마지막"}\n\`\`\`\n<!-- TRACKER:END -->`);
+    const ok3 = x3.found && x3.json && x3.json.note === '마지막' && /처음/.test(x3.rest);
+    const x4 = C.extractTracker('블록 없음');
+    const ok4 = !x4.found && x4.json === null && x4.rest === '블록 없음';
+    rec(12, '(c) extractTracker', '정상·오류(found+error)·마지막 블록+펜스 제외·없음', `ok=${[ok1, ok2, ok3, ok4]} err=${x2.error}`, ok1 && ok2 && ok3 && ok4);
+  }
+
+  // (d) mergeTracker: upsert·remove·area 자동·검증 상한·user 만 변경 시 changed=false·"변경 없음"/"no changes" 메모
+  {
+    const now = '2026-10-27T01:00:00.000Z';
+    const m0 = C.mergeTracker(null, { project: 'P', items: [ITEM, { id: 'Q-3', title: '자동 영역' }] }, { by: 'claude-t', now });
+    const m1 = C.mergeTracker(m0.json, { items: [{ id: 'A-1', title: '바뀐 제목' }] }, { by: 'claude-t', now });
+    const it1 = m1.json.items.find((x) => x.id === 'A-1');
+    const okUpsert = m0.added === 2 && m1.changed && m1.updated === 1 && it1.title === '바뀐 제목' && it1.account === ITEM.account && it1.ai.status === 'ok';
+    const okArea = m0.json.items.find((x) => x.id === 'Q-3').area === 'Q' && m0.json.areas.some((x) => x.id === 'Q' && x.title === 'Q') && m0.json.areas.some((x) => x.id === 'A');
+    const m2 = C.mergeTracker(m1.json, { remove: ['Q-3', 'NONE'] }, { now });
+    const okRemove = m2.removed === 1 && m2.changed && m2.json.items.length === 1;
+    const many = []; for (let i = 0; i < 305; i++) many.push({ id: `M-${i}` });
+    const m3 = C.mergeTracker(null, { items: many.concat([{ id: '-bad' }, { id: 'x'.repeat(17) }, { id: 'L-1', title: '가'.repeat(700), ai: { status: 'weird' }, user: { status: 'weird' } }]) }, { now });
+    const okLimit = m3.json.items.length === 300 && !m3.json.items.some((x) => x.id === '-bad' || x.id.length > 16);
+    const m3b = C.mergeTracker(m0.json, { items: [{ id: 'L-1', title: '가'.repeat(700), ai: { status: 'weird' }, user: { status: 'weird' } }] }, { now });
+    const l1 = m3b.json.items.find((x) => x.id === 'L-1');
+    const okCap = l1.title.length === 600 && l1.ai.status === '-' && l1.user.status === '';
+    const m4 = C.mergeTracker(m1.json, { items: [{ id: 'A-1', user: { status: 'ok', note: '확인함' } }] }, { now });
+    const okUser = m4.changed === false && m4.userOnly === true && m4.json.items.find((x) => x.id === 'A-1').user.status === 'ok' && m4.json.userSyncAt === now;
+    const m5 = C.mergeTracker(m1.json, { note: '변경 없음', items: [] }, { now });
+    const m5e = C.mergeTracker(m1.json, { note: 'No changes.' }, { now });
+    const okNoChange = m5.changed === false && m5.json.notes.length === 0 && m5e.changed === false && m5e.json.notes.length === 0;
+    const m6 = C.mergeTracker(m1.json, { note: '사용자에게 남기는 메모' }, { now });
+    rec(12, '(d) mergeTracker', 'upsert·area 자동·remove·상한(300·600·id)·status 정규화·user 만=userOnly·"변경 없음"/"No changes." 무변경·메모=changed',
+      `upsert=${okUpsert} area=${okArea} remove=${okRemove} limit=${okLimit}(${m3.json.items.length}) cap=${okCap} user=${okUser} nochange=${okNoChange} note=${m6.changed}/${m6.json.notes.length}`,
+      okUpsert && okArea && okRemove && okLimit && okCap && okUser && okNoChange && m6.changed && m6.json.notes.length === 1);
+  }
+
+  // (e) Stop: 블록 → TRACKER.json·HTML 생성·pending·로그·Turn-end 에 블록 없음 / (g) 같은 Stop 이 발행 차단 1회
+  const aE = P('t20e'); const sE = startSession(aE);
+  {
+    postT(sE, aE, 'Write', { file_path: path.join(aE, 'index.html') });
+    const r = stop12(sE, aE, `구현했습니다.\n${tblock({ project: '시험 프로젝트', areas: [{ id: 'A', title: '로그인' }], items: [ITEM] })}\n${block('E')}`);
+    const j = readJson(trFile(aE)) || {};
+    const log = logOf(aE);
+    const turnEnd = log.split('\n').filter((l) => l.includes('[Turn-end]')).pop() || '';
+    rec(12, '(e) Stop 블록 → json·html·pending·로그', 'TRACKER.json(mode on·항목 1·pending true·htmlHash 12자)·index.html·[TRACKER] 항목 +1 ~0 -0·Turn-end 에 TRACKER 없음·STATUS 저장',
+      `mode=${j.mode} n=${(j.items || []).length} pending=${j.pending} hash=${j.htmlHash} html=${fs.existsSync(htmlFile(aE))} logOk=${/\[TRACKER\] 항목 \+1 ~0 -0/.test(log)} turnEnd=${turnEnd.slice(-60)}`,
+      j.mode === 'on' && (j.items || []).length === 1 && j.items[0].account === ITEM.account && j.pending === true && /^[0-9a-f]{12}$/.test(String(j.htmlHash))
+      && fs.existsSync(htmlFile(aE)) && /\[TRACKER\] 항목 \+1 ~0 -0/.test(log) && !/TRACKER:BEGIN/.test(turnEnd) && /STATUS 갱신/.test(turnEnd) && /- E 하던 일/.test(statusOf(aE) || ''));
+    const reason = reasonOf(r.out);
+    const st = readJson(stateFile(sE)) || {};
+    rec(12, '(g) pending → 발행 차단 1회', 'block·reason 에 file_path(index.html)·capabilities {"db":{},"user":{}}·publishAskedAt·[TRACKER] 발행 요구',
+      `block=${BLOCK_RE.test(r.out)} file=${reason.toLowerCase().includes(htmlFile(aE).toLowerCase())} caps=${reason.includes('capabilities {"db":{},"user":{}}')} asked=${st.publishAskedAt} log=${/\[TRACKER\] 발행 요구/.test(logOf(aE))}`,
+      BLOCK_RE.test(r.out) && reason.toLowerCase().includes(htmlFile(aE).toLowerCase()) && reason.includes('capabilities {"db":{},"user":{}}')
+      && reason.includes('시험 프로젝트 트래커') && !!st.publishAskedAt && /\[TRACKER\] 발행 요구/.test(logOf(aE)) && !/상태 블록이 없습니다/.test(reason));
+    // 같은 턴 두 번째 Stop(stop_hook_active 아님): pending 이지만 publishAskedAt 있음 → 차단 없음
+    const r2 = stop12(sE, aE, `아직 발행 안 함\n${block('E1')}`, { stop_hook_active: false });
+    // url 블록 → pending=false·publishedAt·publishedHash·로그
+    const r3 = stop12(sE, aE, tblock({ url: 'https://claude.ai/artifact/abcDEF123456' }), { stop_hook_active: true });
+    const j3 = readJson(trFile(aE)) || {};
+    // 잘못된 url 은 무시
+    const r4 = stop12(sE, aE, tblock({ url: 'https://evil.example.com/artifact/abcdef' }), { stop_hook_active: true });
+    const j4 = readJson(trFile(aE)) || {};
+    rec(12, '(g) url 블록 → pending=false·publishedAt', '2회차 무출력·url 저장·pending false·publishedHash=htmlHash·[TRACKER] 발행 url 저장·잘못된 url 무시',
+      `out2='${r2.out}' url=${j3.url} pending=${j3.pending} pubAt=${j3.publishedAt} pubHash=${j3.publishedHash === j3.htmlHash} log=${/\[TRACKER\] 발행 url 저장/.test(logOf(aE))} bad=${j4.url}`,
+      r2.out === '' && r3.out === '' && r4.out === '' && j3.url === 'https://claude.ai/artifact/abcDEF123456' && j3.pending === false && !!j3.publishedAt
+      && j3.publishedHash === j3.htmlHash && /\[TRACKER\] 발행 url 저장/.test(logOf(aE)) && j4.url === 'https://claude.ai/artifact/abcDEF123456');
+    // user 만 바뀐 블록 → 저장만(pending 유지 false·html 불변)
+    const htmlBefore = fs.readFileSync(htmlFile(aE), 'utf-8');
+    stop12(sE, aE, tblock({ items: [{ id: 'A-1', user: { status: 'fail', note: '버튼 없음' } }] }), { stop_hook_active: true });
+    const j5 = readJson(trFile(aE)) || {};
+    rec(12, '(d·e) user 만 변경 → 저장만', 'user.status=fail 저장·pending false·html 불변·userSyncAt',
+      `user=${j5.items && j5.items[0].user.status} pending=${j5.pending} same=${fs.readFileSync(htmlFile(aE), 'utf-8') === htmlBefore} sync=${!!j5.userSyncAt}`,
+      j5.items && j5.items[0].user.status === 'fail' && j5.pending === false && fs.readFileSync(htmlFile(aE), 'utf-8') === htmlBefore && !!j5.userSyncAt);
+    // JSON 오류 → 로그 1줄·재차단 없음(블록 있음으로 간주)
+    run('prompt-submit.mjs', { session_id: sE, cwd: aE, prompt: '다음 작업' }, baseEnv(sE));
+    postT(sE, aE, 'Edit', { file_path: path.join(aE, 'index.html') });
+    const r6 = stop12(sE, aE, `x\n<!-- TRACKER:BEGIN -->\n{"items":[\n<!-- TRACKER:END -->\n${block('E2')}`);
+    rec(12, '(c·e) JSON 오류 → 로그·재차단 없음', '[TRACKER] JSON 오류·무출력', `out='${r6.out}' log=${/\[TRACKER\] JSON 오류/.test(logOf(aE))}`,
+      r6.out === '' && /\[TRACKER\] JSON 오류/.test(logOf(aE)));
+  }
+
+  // (f) 마커 있고 블록 없음 → 차단 1회(reason 에 TRACKER 형식), 두 번째 Stop(stop_hook_active)·trackerBlockedAt 이면 차단 없음, STATUS 와 합쳐 1회
+  {
+    const a = P('t20f'); const sid = startSession(a);
+    postT(sid, a, 'Edit', { file_path: path.join(a, 'main.ts') });
+    const r1 = stop12(sid, a, `수정했습니다.\n${block('F')}`);
+    const rs1 = reasonOf(r1.out);
+    const st1 = readJson(stateFile(sid)) || {};
+    const r2 = stop12(sid, a, '여전히 없음', { stop_hook_active: true });
+    postT(sid, a, 'Edit', { file_path: path.join(a, 'main.ts') });
+    const r3 = stop12(sid, a, `또 수정.\n${block('F3')}`);
+    rec(12, '(f) 마커+블록 없음 → 차단 1회', 'block·reason 에 TRACKER:BEGIN·STATUS 요구 없음·trackerBlockedAt·로그 / 2회차(stop_hook_active) 무출력 / trackerBlockedAt 남음 → 무출력',
+      `block=${BLOCK_RE.test(r1.out)} fmt=${rs1.includes('<!-- TRACKER:BEGIN -->')} status=${/상태 블록이 없습니다/.test(rs1)} tba=${!!st1.trackerBlockedAt} out2='${r2.out}' out3='${r3.out}' log=${/\[TRACKER\] 블록 요구/.test(logOf(a))}`,
+      BLOCK_RE.test(r1.out) && rs1.includes('<!-- TRACKER:BEGIN -->') && !/상태 블록이 없습니다/.test(rs1) && !!st1.trackerBlockedAt
+      && r2.out === '' && r3.out === '' && /\[TRACKER\] 블록 요구/.test(logOf(a)));
+    // 프롬프트 제출 → trackerBlockedAt·publishAskedAt null·.tracker 제거 → 다음 턴 STATUS·TRACKER 둘 다 없으면 합쳐 1회
+    postT(sid, a, 'Edit', { file_path: path.join(a, 'main.ts') });
+    run('prompt-submit.mjs', { session_id: sid, cwd: a, prompt: '계속' }, baseEnv(sid));
+    const stP = readJson(stateFile(sid)) || {};
+    const mkGone = !fs.existsSync(marker(sid));
+    postT(sid, a, 'Bash', { command: 'npm run build' });
+    const r4 = stop12(sid, a, '블록 둘 다 없음');
+    const rs4 = reasonOf(r4.out);
+    const nBlocks = (r4.out.match(/"decision":"block"/g) || []).length;
+    const r5 = stop12(sid, a, '여전히 없음', { stop_hook_active: true });
+    rec(12, '(f) STATUS 와 합쳐 1회', '프롬프트 후 null·마커 제거 / reason 1개에 STATUS 형식+TRACKER 형식 / 2회차 무출력·마커 정리',
+      `reset=${stP.trackerBlockedAt === null && stP.publishAskedAt === null} mkGone=${mkGone} blocks=${nBlocks} both=${/상태 블록이 없습니다/.test(rs4)}/${rs4.includes('<!-- TRACKER:BEGIN -->')} out5='${r5.out}' marker=${fs.existsSync(marker(sid))}`,
+      stP.trackerBlockedAt === null && stP.publishAskedAt === null && mkGone && nBlocks === 1 && /상태 블록이 없습니다/.test(rs4) && rs4.includes('<!-- TRACKER:BEGIN -->')
+      && rs4.startsWith('[auto-history]') && r5.out === '' && !fs.existsSync(marker(sid)));
+  }
+
+  // (h) codex → 블록 병합·HTML 까지, 발행 차단 없음·pending 유지
+  {
+    const a = P('t20h'); fs.mkdirSync(a, { recursive: true }); const sc = sidNew();
+    run('session-start.mjs', { session_id: sc, source: 'startup', cwd: a }, cxEnv(sc), CX);
+    run('post-tool.mjs', { session_id: sc, cwd: a, tool_name: 'Bash', tool_input: { command: 'npm run build' }, duration_ms: 3 }, cxEnv(sc), CX);
+    const r = run('stop.mjs', { session_id: sc, cwd: a, last_assistant_message: `끝\n${tblock({ items: [ITEM] })}\n${block('H')}` }, cxEnv(sc), CX);
+    const j = readJson(trFile(a)) || {};
+    rec(12, '(h) codex → 발행 차단 없음·pending 유지', '무출력·TRACKER.json pending true·html 생성·by=codex-<id8>',
+      `out='${r.out}' pending=${j.pending} html=${fs.existsSync(htmlFile(a))} by=${j.items && j.items[0].by}`,
+      r.out === '' && j.pending === true && fs.existsSync(htmlFile(a)) && j.items && j.items[0].by === `codex-${sc.slice(0, 8)}`);
+  }
+
+  // (i) legacy → 마커 있어도 차단 없음·블록 무시, mode:on 블록 → 켜짐 / mode:off → 끔 / 전역 TRACKER_OFF
+  {
+    const a = P('t20i'); fs.mkdirSync(path.join(a, HD), { recursive: true });
+    fs.writeFileSync(path.join(a, HD, '2026-10-01.md'), '- 기존 기록\n');
+    const sid = startSession(a);
+    postT(sid, a, 'Edit', { file_path: path.join(a, 'x.ts') });
+    const hadMarker = fs.existsSync(marker(sid));
+    const r1 = stop12(sid, a, `수정.\n${block('I')}`);
+    const r2 = stop12(sid, a, `수정.\n${tblock({ items: [ITEM] })}\n${block('I2')}`, { stop_hook_active: true });
+    const ignored = /\[TRACKER\] 비활성 프로젝트 블록 무시/.test(logOf(a)) && !fs.existsSync(trFile(a));
+    stop12(sid, a, `켜기.\n${tblock({ mode: 'on', items: [ITEM] })}\n${block('I3')}`, { stop_hook_active: true });
+    const j = readJson(trFile(a)) || {};
+    const eligOn = C.trackerEligibility(a, { AUTO_HISTORY_CONF_DIR: CONF }).mode;
+    stop12(sid, a, `끄기.\n${tblock({ mode: 'off' })}\n${block('I4')}`, { stop_hook_active: true });
+    const eligOff = C.trackerEligibility(a, { AUTO_HISTORY_CONF_DIR: CONF }).mode;
+    rec(12, '(i) legacy → 차단 없음·mode on 으로 켬·mode off 로 끔', '마커 있음·무출력·블록 무시 로그·json 없음 → mode on 블록 후 on·항목 1 → off 블록 후 off·[TRACKER] 끔',
+      `marker=${hadMarker} out1='${r1.out}' out2='${r2.out}' ignored=${ignored} mode=${j.mode} n=${(j.items || []).length} elig=${eligOn}→${eligOff} log=${/\[TRACKER\] 끔/.test(logOf(a))}`,
+      hadMarker && r1.out === '' && r2.out === '' && ignored && j.mode === 'on' && (j.items || []).length === 1 && eligOn === 'on' && eligOff === 'off' && /\[TRACKER\] 끔/.test(logOf(a)));
+    const b = P('t20i2'); const sb = startSession(b, sidNew(), { AUTO_HISTORY_CONF_DIR: CONF_TOFF });
+    postT(sb, b, 'Edit', { file_path: path.join(b, 'x.ts') }, {}, baseEnv(sb, { AUTO_HISTORY_CONF_DIR: CONF_TOFF }));
+    const rb = stop12(sb, b, `수정.\n${block('IB')}`, {}, baseEnv(sb, { AUTO_HISTORY_CONF_DIR: CONF_TOFF }));
+    stop12(sb, b, `수정.\n${tblock({ mode: 'on', items: [ITEM] })}\n${block('IB2')}`, { stop_hook_active: true }, baseEnv(sb, { AUTO_HISTORY_CONF_DIR: CONF_TOFF }));
+    rec(12, '(i) 전역 TRACKER_OFF', '무출력·mode on 블록도 무시(json 없음)', `out='${rb.out}' json=${fs.existsSync(trFile(b))}`, rb.out === '' && !fs.existsSync(trFile(b)));
+  }
+
+  // (j) Reader `=== 트래커 ===` 절·위치·길이 상한·json 없으면 생략
+  {
+    const sec = C.trackerReaderSection(aE, baseEnv(sE));
+    const body = C.readerBody(aE, baseEnv(sE), { sid8: sE.slice(0, 8) });
+    const iS = body.indexOf('=== STATUS.md ==='); const iT = body.indexOf('=== 트래커 ==='); const iL = body.indexOf('=== 오늘 로그 꼬리');
+    const big = P('t20j'); fs.mkdirSync(path.join(big, HD), { recursive: true });
+    const notes = []; for (let i = 0; i < 10; i++) notes.push({ at: '2026-10-27T00:00:00Z', text: '메모'.repeat(300) });
+    fs.writeFileSync(trFile(big), JSON.stringify({ mode: 'on', url: `https://claude.ai/artifact/${'x'.repeat(2000)}`, items: [], notes }));
+    const secBig = C.trackerReaderSection(big, baseEnv(sE));
+    const none = P('t20j-none'); fs.mkdirSync(none, { recursive: true });
+    rec(12, '(j) Reader 트래커 절', 'url·항목 1·사용자 문제 1·발행 대기 아니오 포함·STATUS 뒤 로그 앞·상한 1200·json 없음 → ""',
+      `pos=${iS}<${iT}<${iL} url=${sec.includes('abcDEF123456')} fail=${/사용자 정상 0·문제 1·미확인 0/.test(sec)} big=${secBig.length} none=${JSON.stringify(C.trackerReaderSection(none, baseEnv(sE)))}`,
+      iS >= 0 && iT > iS && iL > iT && sec.includes('https://claude.ai/artifact/abcDEF123456') && /항목 1 /.test(sec) && /사용자 정상 0·문제 1·미확인 0/.test(sec)
+      && /발행 대기: 아니오/.test(sec) && secBig.length <= 1200 && C.trackerReaderSection(none, baseEnv(sE)) === '' && !C.readerBody(none, baseEnv(sE)).includes('=== 트래커 ==='));
+  }
+
+  // (k) 프롬프트 지시문: on+pending+claude → TRACKER·발행 단락, codex → 발행 없음, legacy → 켜기 한 줄 / 세션 시작 db 읽기 지시(url 있을 때만)
+  {
+    const a = P('t20k'); fs.mkdirSync(path.join(a, HD), { recursive: true });
+    fs.writeFileSync(trFile(a), JSON.stringify({ version: 1, mode: 'on', project: '케이 프로젝트', pending: true, items: [ITEM] }));
+    const s1 = startSession(a);
+    const c1 = ctxOf(run('prompt-submit.mjs', { session_id: s1, cwd: a, prompt: '작업' }, baseEnv(s1)).out);
+    const sc = sidNew();
+    run('session-start.mjs', { session_id: sc, source: 'startup', cwd: a }, cxEnv(sc), CX);
+    const c2 = ctxOf(run('prompt-submit.mjs', { session_id: sc, cwd: a, prompt: '작업' }, cxEnv(sc), CX).out);
+    const n = P('t20k-new'); const s3 = startSession(n);
+    const c3 = ctxOf(run('prompt-submit.mjs', { session_id: s3, cwd: n, prompt: '작업' }, baseEnv(s3)).out);
+    const l = P('t20k-legacy'); fs.mkdirSync(path.join(l, HD), { recursive: true }); fs.writeFileSync(path.join(l, HD, '2026-10-02.md'), '- x\n');
+    const s4 = startSession(l);
+    const c4 = ctxOf(run('prompt-submit.mjs', { session_id: s4, cwd: l, prompt: '작업' }, baseEnv(s4)).out);
+    const hasFmt = (c) => c.includes('<!-- TRACKER:BEGIN -->\n{"project"');
+    const hasPub = (c) => c.includes('지금 발행하세요');
+    rec(12, '(k) 프롬프트 지시문', 'on+pending+claude: STATUS·TRACKER·발행 / codex: TRACKER 만 / new: TRACKER 만 / legacy: 켜기 한 줄만',
+      `on=${/STATUS:BEGIN/.test(c1)}/${hasFmt(c1)}/${hasPub(c1)} cx=${hasFmt(c2)}/${hasPub(c2)} new=${hasFmt(c3)}/${hasPub(c3)} legacy=${hasFmt(c4)}/${hasPub(c4)}/${/트래커 켜줘/.test(c4)}`,
+      /STATUS:BEGIN/.test(c1) && hasFmt(c1) && hasPub(c1) && c1.toLowerCase().includes(htmlFile(a).toLowerCase()) && c1.indexOf('STATUS:BEGIN') < c1.indexOf('TRACKER:BEGIN')
+      && hasFmt(c2) && !hasPub(c2) && hasFmt(c3) && !hasPub(c3) && !hasFmt(c4) && !hasPub(c4) && /트래커 켜줘/.test(c4) && /STATUS:BEGIN/.test(c4));
+    const s5 = sidNew();
+    const c5 = ctxOf(run('session-start.mjs', { session_id: s5, source: 'startup', cwd: aE }, baseEnv(s5)).out);
+    const s6 = sidNew();
+    const c6 = ctxOf(run('session-start.mjs', { session_id: s6, source: 'startup', cwd: a }, baseEnv(s6)).out);
+    rec(12, '(k) 세션 시작 db 읽기 지시', 'url 있음 → ArtifactData list checks·notes 1회·[현황] 수치·Reader 트래커 절 / url 없음 → 지시 없음',
+      `withUrl=${/ArtifactData `list`/.test(c5)}/${c5.includes('abcDEF123456')}/${c5.includes('=== 트래커 ===')} noUrl=${/ArtifactData/.test(c6)} len=${c5.length}`,
+      /ArtifactData `list`/.test(c5) && /`checks`/.test(c5) && /`notes`/.test(c5) && c5.includes('https://claude.ai/artifact/abcDEF123456') && c5.includes('=== 트래커 ===')
+      && /\[현황\]/.test(c5) && !/ArtifactData/.test(c6) && c5.length <= C.READER_TOTAL_MAX);
+  }
+
+  // (l) buildTrackerHtml: 데이터 치환·</script 이스케이프·필수 토큰·sha1 안정·템플릿 없음 → ''
+  {
+    const j = C.mergeTracker(null, { project: '빌드 </script><b>x</b> $& $\'', items: [ITEM] }, { by: 'claude-t', now: '2026-10-27T02:00:00.000Z' }).json;
+    const h1 = B.buildTrackerHtml(j, { anchor: aE });
+    const h2 = B.buildTrackerHtml({ ...j, pending: true, htmlHash: 'zzz' }, { anchor: aE });
+    const dataLine = (h1.split('\n').find((x) => x.startsWith('var D = ')) || '');
+    let parsed = null; try { parsed = JSON.parse(dataLine.slice('var D = '.length, -1)); } catch { /* */ }
+    const scripts = (h1.match(/<\/script>/gi) || []).length;
+    const tokens = ['<title>', '<html lang="ko">', 'data-theme', "claude.use('db')", 'checks/', "claude.use('user')", 'prefers-color-scheme: dark', ':root:not([data-theme="light"])', ':root[data-theme="dark"]', 'max-width: 480px'];
+    const missing = tokens.filter((x) => !h1.includes(x));
+    const tt = /<title>([^<]*)<\/title>/.exec(h1);
+    const dir0 = path.join(SCRATCH, 'no-template');
+    const empty = B.buildTrackerHtml(j, { dir: dir0 });
+    const tmpA = P('t20l'); fs.mkdirSync(tmpA, { recursive: true });
+    const hash = B.writeTrackerHtml(tmpA, j, baseEnv(sE));
+    const fileHash = crypto.createHash('sha1').update(fs.readFileSync(htmlFile(tmpA), 'utf-8'), 'utf-8').digest('hex').slice(0, 12);
+    fs.writeFileSync(path.join(SCRATCH, 'sample-tracker.html'), h1);
+    rec(12, '(l) buildTrackerHtml', '데이터 JSON 파싱 가능(lang ko·라벨 사전)·</script 1개(본문만)·<title> 치환·__TRACKER_ 잔재 없음·필수 토큰·발행 필드 무관 sha1 동일·템플릿 없음 ""·writeTrackerHtml 12자=파일 sha1',
+      `parsed=${!!parsed && parsed.project === j.project} lang=${parsed && parsed.lang} L=${parsed && parsed.L && parsed.L.memoHead} scripts=${scripts} title=${tt && tt[1]} rest=${/__TRACKER_/.test(h1)} missing=${JSON.stringify(missing)} stable=${B.sha12(h1) === B.sha12(h2)} empty=${JSON.stringify(empty)} hash=${hash}/${fileHash}`,
+      !!parsed && parsed.project === j.project && parsed.items[0].account === ITEM.account && parsed.lang === 'ko' && parsed.L && parsed.L.memoHead === 'Claude 에게 메모'
+      && scripts === 1 && !!tt && tt[1].endsWith(' 트래커') && !/<b>/.test(tt[1])
+      && !/__TRACKER_/.test(h1) && missing.length === 0 && B.sha12(h1) === B.sha12(h2) && empty === '' && /^[0-9a-f]{12}$/.test(hash) && hash === fileHash);
+  }
+
+  // (o) 영어 모드: 프롬프트 지시문·Stop 로그·발행 reason·페이지 lang/라벨·Reader 절이 영어
+  {
+    const a = P('t20o'); const sid = sidNew();
+    const enEnv = baseEnv(sid, { AUTO_HISTORY_LANG: 'en' });
+    fs.mkdirSync(a, { recursive: true });
+    run('session-start.mjs', { session_id: sid, source: 'startup', cwd: a }, enEnv);
+    const c = ctxOf(run('prompt-submit.mjs', { session_id: sid, cwd: a, prompt: 'work' }, enEnv).out);
+    const enBlk = ['<!-- STATUS:BEGIN -->', '## Working on', '- O', '## Done', '- x', '## Next', '- y', '## Progress', '- z', '<!-- STATUS:END -->'].join('\n');
+    run('post-tool.mjs', { session_id: sid, cwd: a, tool_name: 'Write', tool_input: { file_path: path.join(a, 'app.js') }, duration_ms: 1 }, enEnv);
+    const r = run('stop.mjs', { session_id: sid, cwd: a, transcript_path: '', last_assistant_message: `done\n${tblock({ project: 'Demo app', items: [{ id: 'A-1', title: 'Sign in' }] })}\n${enBlk}` }, enEnv);
+    const rs = reasonOf(r.out);
+    const html = fs.existsSync(htmlFile(a)) ? fs.readFileSync(htmlFile(a), 'utf-8') : '';
+    const sec = C.trackerReaderSection(a, { AUTO_HISTORY_LANG: 'en' });
+    const okPrompt = c.includes('The tracker (user check page) is ON') && c.includes('"title":"Email sign-in"') && !/트래커/.test(c);
+    const okStop = /\[TRACKER\] items \+1 ~0 -0/.test(logOf(a)) && rs.includes('Publish it now.') && rs.includes('title "Demo app tracker"') && !/트래커/.test(rs);
+    const okHtml = html.includes('<html lang="en">') && html.includes('<title>Demo app tracker</title>') && html.includes('"memoHead":"Note to Claude"') && html.includes('"lang":"en"');
+    const okReader = sec.startsWith('\n\n=== Tracker ===') && /publish pending: yes/.test(sec);
+    rec(12, '(o) 영어 모드', '지시문 영어·로그 [TRACKER] items +1 ~0 -0·발행 reason 영어(Demo app tracker)·<html lang="en">·라벨 영어·Reader === Tracker ===',
+      `prompt=${okPrompt} stop=${okStop} html=${okHtml} reader=${okReader}`, okPrompt && okStop && okHtml && okReader);
+  }
+
+  // (m) 기존 1~11행 전부 통과
+  {
+    const prior = results.filter((x) => x.row <= 11);
+    rec(12, '(m) 기존 1~11행 전부 통과', `${prior.length}/${prior.length} PASS`, `${prior.filter((x) => x.pass).length}/${prior.length}`, prior.every((x) => x.pass));
+  }
+
+  // (n) 설치 dry-run 변화 없음·이벤트 6개 그대로(트래커는 이벤트 추가 없음)
+  {
+    const copy = path.join(SCRATCH, 'settings-r20.json');
+    if (process.argv[3]) fs.copyFileSync(process.argv[3], copy);
+    else fs.writeFileSync(copy, JSON.stringify({ permissions: { allow: ['Read'] }, model: 'test-model' }, null, 2) + '\n');
+    const orig = fs.readFileSync(copy, 'utf-8');
+    const inst = (args) => spawnSync(process.execPath, [path.join(HOOK, 'install.mjs'), ...args, '--settings', copy], { encoding: 'utf-8', env: hostEnv({ AUTO_HISTORY_LANG: 'ko' }) });
+    const d = inst(['--install', '--dry-run']);
+    const same = fs.readFileSync(copy, 'utf-8') === orig;
+    inst(['--install']);
+    const evs = Object.keys((readJson(copy) || {}).hooks || {}).sort();
+    const want = ['PostToolUse', 'PreToolUse', 'SessionEnd', 'SessionStart', 'Stop', 'UserPromptSubmit'];
+    rec(12, '(n) 설치 dry-run 변화 없음', 'dry-run 무변경·exit 0·install 이벤트 6개(추가 없음)', `same=${same} code=${d.status} events=${evs.join(',')}`,
+      same && d.status === 0 && evs.join(',') === want.join(','));
+  }
 }
 
 main().catch((e) => { console.error(e); process.exitCode = 1; });

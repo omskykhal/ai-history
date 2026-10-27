@@ -4,8 +4,10 @@ import path from 'node:path';
 import {
   runHook, readInput, emit, resolveAnchor, isInteractive, statePaths, writeState, removeFile, appendLog,
   maybeDump, mask, oneLine, confFileExists, historyDir, writeAtomic, statusFormatFor, statusHeader, missingHeadings,
-  agentConfName, t, sessionStatusPath,
+  agentConfName, t, sessionStatusPath, AGENT,
+  extractTracker, trackerEligibility, mergeTracker, writeTracker, emptyTracker, TRACKER_URL_RE, trackerFormatFor, trackerRulesFor, PUBLISH_INSTRUCTION,
 } from './common.mjs';
+import { writeTrackerHtml } from './tracker-build.mjs';
 
 const BEGIN_RE = /^<!-- STATUS:BEGIN -->\r?$/;
 const END_RE = /^<!-- STATUS:END -->\r?$/;
@@ -135,6 +137,9 @@ runHook(async () => {
   if (!msg) msg = tailFromTranscript(data.transcript_path);
 
   const st = msg ? extractStatus(msg, env) : null;
+  // TRACKER block (last BEGIN~END). The [Turn-end] summary leaves it out.
+  const tr = msg ? extractTracker(msg) : { json: null, error: null, rest: '', found: false };
+  const noTracker = (s) => (tr.found ? extractTracker(s).rest : s);
   if (st) {
     if (st.tailAllowed) appendLog(anchor, data, L.logTailAllowed, env);
     if (st.missing.length) appendLog(anchor, data, L.logIncomplete(st.missing.join(', ')), env);
@@ -147,34 +152,106 @@ runHook(async () => {
       fs.mkdirSync(path.dirname(sp17), { recursive: true });
       writeAtomic(sp17, content);
     } catch { /* fail-open */ }
-    appendLog(anchor, data, L.logTurnEndStatus(oneLine(mask(oneLine(st.rest)), 300)), env);
+    appendLog(anchor, data, L.logTurnEndStatus(oneLine(mask(oneLine(noTracker(st.rest))), 300)), env);
   } else if (!msg.trim()) {
     appendLog(anchor, data, L.logTurnEndNoMsg, env);
   } else {
-    appendLog(anchor, data, `[Turn-end] ${oneLine(mask(oneLine(msg)), 300)}`, env);
+    appendLog(anchor, data, `[Turn-end] ${oneLine(mask(oneLine(noTracker(msg))), 300)}`, env);
   }
   maybeDump('Stop', data, env);
 
+  // Tracker merge (main session only). Log lines are masked, TRACKER.json content is not.
+  let urlSaved = false;
+  if (!data.agent_id) {
+    try {
+      urlSaved = processTracker(anchor, data, tr, env, sid8);
+    } catch (e) { appendLog(anchor, data, L.logTrackerError(oneLine(mask(String(e && e.message)), 120)), env); }
+  }
+
   const sp = statePaths(data.session_id, env);
   const hasTool = fs.existsSync(sp.tool);
-  const shouldBlock = !st
-    && state && !data.agent_id
-    && hasTool
-    && state.blockedAt == null
+  // A TRACKER block (even a broken one) satisfies this turn's request → drop the marker (PostToolUse re-arms it on later changes)
+  if (tr.found && !data.agent_id) removeFile(sp.tracker);
+  const hasTrackerMarker = fs.existsSync(sp.tracker);
+  // Block decision: the STATUS nudge, the TRACKER block request and the publish request share one block per turn
+  const canBlock = () => state && !data.agent_id
     && data.stop_hook_active !== true
     && !confFileExists(agentConfName('NO_BLOCK'), env)
     && env.AUTO_HISTORY_NO_BLOCK !== '1'
     && isInteractive(data, env)
     && !isSafetyException(data);
-
-  if (shouldBlock) {
-    writeState(data.session_id, { ...state, blockedAt: new Date().toISOString() }, env);
-    emit({ decision: 'block', reason: L.blockReason(statusFormatFor(env)) });
-    return;
+  const needStatus = !!(!st && state && hasTool && state.blockedAt == null);
+  if (state && !data.agent_id) {
+    const elig = trackerEligibility(anchor, env);
+    const on = elig.mode === 'on' || elig.mode === 'new';
+    const needTrackerBlock = on && hasTrackerMarker && !tr.found && state.trackerBlockedAt == null;
+    const needPublish = elig.mode === 'on' && !!(elig.json && elig.json.pending) && AGENT === 'claude'
+      && state.publishAskedAt == null && !urlSaved;
+    if ((needStatus || needTrackerBlock || needPublish) && canBlock()) {
+      const now = new Date().toISOString();
+      const parts = [];
+      if (needStatus) parts.push(L.blockReason(statusFormatFor(env)));
+      if (needTrackerBlock) parts.push(L.trackerBlockReason(needStatus, trackerFormatFor(env), trackerRulesFor(env)));
+      if (needPublish) parts.push(PUBLISH_INSTRUCTION(anchor, elig.json, env));
+      writeState(data.session_id, {
+        ...state,
+        blockedAt: needStatus ? now : (state.blockedAt ?? null),
+        trackerBlockedAt: needTrackerBlock ? now : (state.trackerBlockedAt ?? null),
+        publishAskedAt: needPublish ? now : (state.publishAskedAt ?? null),
+      }, env);
+      if (needTrackerBlock) appendLog(anchor, data, L.logTrackerBlockAsk, env);
+      if (needPublish) appendLog(anchor, data, L.logTrackerPublishAsk, env);
+      emit({ decision: 'block', reason: parts.join('\n\n') });
+      return;
+    }
   }
-  // end of marker lifetime
+  // end of marker lifetime (trackerBlockedAt / publishAskedAt are reset on the next prompt)
   if (state && !data.agent_id) {
     removeFile(sp.tool);
+    removeFile(sp.tracker);
     if (state.blockedAt != null) writeState(data.session_id, { ...state, blockedAt: null }, env);
   }
 });
+
+// Apply a TRACKER block → TRACKER.json and the page HTML. Returns true when this block saved a published url.
+function processTracker(anchor, data, tr, env, sid8) {
+  if (!tr || !tr.found) return false;
+  const L = t(env);
+  if (tr.error) { appendLog(anchor, data, L.logTrackerJsonError, env); return false; }
+  const block = tr.json;
+  const elig = trackerEligibility(anchor, env);
+  const now = new Date().toISOString();
+  if (elig.reason === 'TRACKER_OFF') { appendLog(anchor, data, L.logTrackerIgnored, env); return false; }
+  if (block.mode === 'off') {
+    const j = elig.json || emptyTracker(now);
+    j.mode = 'off';
+    j.updatedAt = now;
+    writeTracker(anchor, j, env);
+    appendLog(anchor, data, L.logTrackerOff, env);
+    return false;
+  }
+  if ((elig.mode === 'off' || elig.mode === 'legacy') && block.mode !== 'on') {
+    appendLog(anchor, data, L.logTrackerIgnored, env);
+    return false;
+  }
+  const m = mergeTracker(elig.json, block, { by: `${AGENT}-${sid8}`, now });
+  const j = m.json;
+  j.mode = 'on';
+  if (m.changed) {
+    const hash = writeTrackerHtml(anchor, j, env);
+    if (hash) { j.htmlHash = hash; j.pending = true; }
+  }
+  let urlSaved = false;
+  const url = typeof block.url === 'string' ? block.url.trim() : '';
+  if (url && TRACKER_URL_RE.test(url)) {
+    j.url = url;
+    j.pending = false;
+    j.publishedAt = now;
+    j.publishedHash = j.htmlHash || null;
+    urlSaved = true;
+  }
+  writeTracker(anchor, j, env);
+  if (m.changed || m.userOnly) appendLog(anchor, data, L.logTrackerItems(m.added, m.updated, m.removed, m.userOnly), env);
+  if (urlSaved) appendLog(anchor, data, L.logTrackerUrl, env);
+  return urlSaved;
+}

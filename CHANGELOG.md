@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.0 — 2026-10-27
+
+- Tracker page (user check page) per project: `.ai-history/TRACKER.json` (source of truth) and `.ai-history/tracker/index.html`, built by the new `tracker-build.mjs` from the new `tracker-template.html` (no external loads, light/dark, phone layout; labels and `<html lang>` follow `AUTO_HISTORY_LANG`).
+- `PostToolUse` arms a per-session `.tracker` marker on edits under the anchor (outside `.ai-history`, `.git`, `node_modules`, `.omc`, `.claude`) and on build / deploy / create shell commands. `UserPromptSubmit` adds a TRACKER instruction after the STATUS instruction (format + wording rules; a one-line "how to turn it on" for older projects).
+- `Stop` extracts the last `<!-- TRACKER:BEGIN/END -->` block, merges it (upsert by id, remove, auto areas, 300 items, 600 chars per field, 50 notes; a `no changes` note is not stored) and rebuilds the HTML (`pending`). One combined block per turn asks for a missing STATUS block, a missing TRACKER block and (Claude only) publishing the changed HTML as a claude.ai Artifact with `db` + `user`; a `{"url":…}` block stores the published url. The `[Turn-end]` summary leaves the TRACKER block out. Log lines: `[TRACKER] items +a ~b -c`, `published url saved`, `JSON error`, `off`, `block ignored (tracker inactive)`, `publish requested`, `block requested`.
+- Reader: a tracker section (url, item / verdict counts, publish pending, last 3 notes; ≤1,200 chars) after `STATUS.md`. Session start / project mention ask Claude to read the page db (`checks`, `notes`) once when a url exists.
+- Eligibility: global `TRACKER_OFF` conf file > `TRACKER.json` mode > history age (projects whose history starts before `TRACKER_SINCE`, default `2026-10-27`, stay off until a `{"mode":"on"}` block).
+- No new hook events; the installer and `hooks/hooks.json` are unchanged.
+- Tests: 225 cases (+22, row 12).
+
 ## 0.3.0 — 2026-10-26
 
 - Resume command: the `STATUS.md` header (and the `sessions/` copy) gets a `Resume: claude --resume <id>` / `Resume: codex resume <id>` line after `Anchor` (`재개:` in Korean mode). The line is omitted for an unknown agent or a session id with spaces or quotes.

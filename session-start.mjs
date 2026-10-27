@@ -4,6 +4,7 @@ import path from 'node:path';
 import {
   runHook, readInput, emit, inScope, normalizeWinPath, isInteractive, statePaths, writeState, removeFile, maybeDump, historyDir,
   resolveAnchor, readerBody, READER_TOTAL_MAX, VALID_SOURCES, AGENT, lastWorkerLine, t, appendLog, runRetention, retentionLogLine,
+  trackerDbReadInstruction,
 } from './common.mjs';
 
 const STALE_MS = 7 * 24 * 60 * 60 * 1000;
@@ -37,6 +38,7 @@ runHook(async () => {
     // started/resumed outside the root: drop state, inject nothing
     removeFile(sp.json);
     removeFile(sp.tool);
+    removeFile(sp.tracker);
     return;
   }
 
@@ -65,7 +67,8 @@ runHook(async () => {
     ctx = L.sessionNoHistory;
   } else {
     const lw = lastWorkerLine(anchor, env);
-    ctx = `${lw ? `[auto-history] ${lw}\n` : ''}${L.sessionIntro(anchor)}${L.sessionInstruction}${readerBody(anchor, env, { sid8: String(data.session_id).slice(0, 8) })}`;
+    const dbRead = trackerDbReadInstruction(anchor, env); // read the tracker page db once (only when it has a url)
+    ctx = `${lw ? `[auto-history] ${lw}\n` : ''}${L.sessionIntro(anchor)}${L.sessionInstruction}${dbRead ? `\n${dbRead}` : ''}${readerBody(anchor, env, { sid8: String(data.session_id).slice(0, 8) })}`;
     if (ctx.length > READER_TOTAL_MAX) ctx = ctx.slice(0, READER_TOTAL_MAX);
   }
   emit({ hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: ctx } });
