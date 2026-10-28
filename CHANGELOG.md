@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.4.1 — 2026-10-28
+
+Plugin-directory review follow-up (automated scan notes "reads a credential from the user's environment" and "downloads code and runs it"). No feature change.
+
+- Hooks no longer touch `process.env` as a whole: every hook builds its environment with the new `hookEnv()`, which copies only the fixed `ENV_KEYS` allow-list (`AUTO_HISTORY_*`, the `CLAUDE_*` session/plugin variables, `AI_AGENT`). Tokens, API keys and other tools' variables are never read.
+- `DUMP_INPUTS` debug dumps record only that same fixed key list; the Codex dump no longer copies every `CODEX*` variable.
+- `NESTED_MARKERS` lines (`NAME=value`) now accept only a plain identifier as `NAME`; the variable is compared with the value and nothing else is done with it.
+- `install.mjs --config` builds its retention check from the allow-list instead of a copy of the whole environment.
+- README (en/ko): the install section no longer shows a clone-then-run block; it says to get the files once (clone or release archive) and run the installer from the files already on disk. Nothing is downloaded at install time.
+- Tests: 226 cases (+1, `hookEnv` allow-list).
+
 ## 0.4.0 — 2026-10-27
 
 - Tracker page (user check page) per project: `.ai-history/TRACKER.json` (source of truth) and `.ai-history/tracker/index.html`, built by the new `tracker-build.mjs` from the new `tracker-template.html` (no external loads, light/dark, phone layout; labels and `<html lang>` follow `AUTO_HISTORY_LANG`).

@@ -4,12 +4,12 @@
 // Non-blocking event: no output, exit 0 on any error.
 import path from 'node:path';
 import {
-  runHook, readInput, readState, inScope, normalizeWinPath, historyDir, appendLog, maybeDump,
+  runHook, readInput, hookEnv, readState, inScope, normalizeWinPath, historyDir, appendLog, maybeDump,
   resumeCommand, upsertStatusResume, sessionStatusPath, oneLine, mask, t, AGENT,
 } from './common.mjs';
 
 runHook(async () => {
-  const env = process.env;
+  const env = hookEnv();
   if (env.AUTO_HISTORY_DISABLE === '1') return;
   const data = await readInput();
   if (!data || !data.session_id) return;

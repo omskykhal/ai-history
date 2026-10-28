@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {
-  runHook, readInput, emit, resolveAnchor, isInteractive, statePaths, writeState, removeFile, appendLog,
+  runHook, readInput, hookEnv, emit, resolveAnchor, isInteractive, statePaths, writeState, removeFile, appendLog,
   maybeDump, mask, oneLine, confFileExists, historyDir, writeAtomic, statusFormatFor, statusHeader, missingHeadings,
   agentConfName, t, sessionStatusPath, AGENT,
   extractTracker, trackerEligibility, mergeTracker, writeTracker, emptyTracker, TRACKER_URL_RE, trackerFormatFor, trackerRulesFor, PUBLISH_INSTRUCTION,
@@ -123,7 +123,7 @@ function isSafetyException(data) {
 }
 
 runHook(async () => {
-  const env = process.env;
+  const env = hookEnv();
   if (env.AUTO_HISTORY_DISABLE === '1') return;
   const data = await readInput();
   if (!data || !data.session_id) return;

@@ -1,10 +1,10 @@
 // PostToolUse hook: log the tool call end (+duration) and arm the "tools were used" marker for the Stop hook.
 import {
-  runHook, readInput, resolveAnchor, appendLog, maybeDump, summarizeTool, statePaths, touchFile, isTrackerChangeTool,
+  runHook, readInput, hookEnv, resolveAnchor, appendLog, maybeDump, summarizeTool, statePaths, touchFile, isTrackerChangeTool,
 } from './common.mjs';
 
 runHook(async () => {
-  const env = process.env;
+  const env = hookEnv();
   if (env.AUTO_HISTORY_DISABLE === '1') return;
   const data = await readInput();
   if (!data || !data.session_id) return;

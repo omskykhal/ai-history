@@ -31,9 +31,9 @@
 
 **설치 스크립트(권장, Claude Code 와 Codex 모두)**
 
+먼저 파일을 한 번 받습니다. 이 저장소를 clone 하거나 GitHub Releases 에서 압축본을 내려받아 풀고, 그 폴더에서 터미널을 엽니다. 아래 명령은 전부 이미 받아 둔 파일로만 동작하며 설치 중에 새로 내려받는 것은 없습니다.
+
 ```bash
-git clone https://github.com/omskykhal/ai-history.git
-cd ai-history
 # 1) 프로젝트들이 모여 있는 상위 폴더 지정 + 주입 문구 언어 선택
 node install.mjs --install --root "C:\Users\me\Desktop\Project" --lang ko
 # 2) 선택: Codex 에도 같은 훅 등록(첫 Codex 실행 때 핸들러 5개 신뢰 승인 프롬프트가 뜸)
@@ -174,7 +174,7 @@ API 키처럼 보이는 문자열(`AIza…`, `sk-…`, `ghp_…`, `Bearer …`, 
 node test/run-tests.mjs <scratch-dir>
 ```
 
-225건(훅 동작·앵커 규칙·별칭/폴더 매칭·STATUS 추출·안전 예외·설치기 왕복·영어 모드·로그 보존·다중 세션 STATUS·재개 명령·트래커 페이지). 시험 산출물은 OS 임시 폴더에만 생기고 실제 프로젝트엔 쓰지 않습니다.
+226건(훅 동작·앵커 규칙·별칭/폴더 매칭·STATUS 추출·안전 예외·설치기 왕복·영어 모드·로그 보존·다중 세션 STATUS·재개 명령·트래커 페이지). 시험 산출물은 OS 임시 폴더에만 생기고 실제 프로젝트엔 쓰지 않습니다.
 
 ## 알려진 한계
 

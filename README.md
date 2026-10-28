@@ -31,9 +31,9 @@ Close the laptop mid-task, come back tomorrow, open Claude Code *or* Codex from 
 
 **Installer script (recommended, covers Claude Code and Codex)**
 
+Get the files once: clone this repository (or download a release archive from the GitHub Releases page and unpack it) and open a terminal in that folder. Everything below runs from the files you now have on disk; nothing is fetched at install time.
+
 ```bash
-git clone https://github.com/omskykhal/ai-history.git
-cd ai-history
 # 1) point it at the folder that holds all your projects, choose the language of the injected instructions
 node install.mjs --install --root "C:\Users\me\Projects" --lang en
 # 2) optional: register the same hooks for Codex (first Codex start asks you to trust 5 handlers)
@@ -174,7 +174,7 @@ Status: verified once on Windows with `claude --plugin-dir` (2026-10-12: `.ai-hi
 node test/run-tests.mjs <scratch-dir>
 ```
 
-225 cases (hook behaviour, anchor rules, alias/folder matching, STATUS extraction, safety exceptions, installer round-trips, English mode, log retention, multi-session STATUS, resume command, tracker page). Test artifacts go to the OS temp dir, never into a real project.
+226 cases (hook behaviour, anchor rules, alias/folder matching, STATUS extraction, safety exceptions, installer round-trips, English mode, log retention, multi-session STATUS, resume command, tracker page). Test artifacts go to the OS temp dir, never into a real project.
 
 ## Known limits
 

@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {
-  runHook, readInput, emit, inScope, normalizeWinPath, isInteractive, statePaths, writeState, removeFile, maybeDump, historyDir,
+  runHook, readInput, hookEnv, emit, inScope, normalizeWinPath, isInteractive, statePaths, writeState, removeFile, maybeDump, historyDir,
   resolveAnchor, readerBody, READER_TOTAL_MAX, VALID_SOURCES, AGENT, lastWorkerLine, t, appendLog, runRetention, retentionLogLine,
   trackerDbReadInstruction,
 } from './common.mjs';
@@ -23,7 +23,7 @@ function cleanupStale(dir) {
 }
 
 runHook(async () => {
-  const env = process.env;
+  const env = hookEnv();
   if (env.AUTO_HISTORY_DISABLE === '1') return;
   const data = await readInput();
   if (!data || !data.session_id) return;

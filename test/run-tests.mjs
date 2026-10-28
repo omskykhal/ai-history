@@ -192,6 +192,14 @@ async function main() {
     const got = C.isInteractive({ session_id: S }, env);
     rec(1, `isInteractive ${name}`, String(want), String(got), got === want);
   }
+  // hookEnv: allow-listed keys only; tokens / API keys / other tools' variables in the host env never reach the hooks
+  {
+    const host = { AUTO_HISTORY_ROOT: 'r', CLAUDE_CODE_ENTRYPOINT: 'cli', CLAUDE_CODE_MESSAGING_TOKEN: 'tkn', ANTHROPIC_API_KEY: 'sk-abcdefghijklmnop1234', CODEX_API_KEY: 'x', GH_TOKEN: 'y', PATH: 'p' };
+    const e = C.hookEnv(host);
+    const keys = Object.keys(e).sort().join(',');
+    rec(1, 'hookEnv 허용목록', 'AUTO_HISTORY_ROOT,CLAUDE_CODE_ENTRYPOINT 만', keys,
+      keys === 'AUTO_HISTORY_ROOT,CLAUDE_CODE_ENTRYPOINT' && C.ENV_KEYS.every((k) => /^(AUTO_HISTORY_|CLAUDE_|CLAUDECODE$|AI_AGENT$)/.test(k)) && !C.ENV_KEYS.some((k) => /TOKEN|KEY|SECRET|PASS/i.test(k)));
+  }
 
   // ---------- 2행 session-start ----------
   {
@@ -856,8 +864,8 @@ async function main() {
       rec(7, '(at) "x_play 확인"=null, "play 확인"=tauko', `null,${R(TK)}`, `${m3('x_play 확인')},${m3('play 확인')}`,
         m3('x_play 확인') === null && m3('play 확인') === R(TK));
       const prior150 = results.slice(0, results.length - 6);
-      rec(7, '(au) 기존 7행까지 139건 전부 통과(8행 기존 11건=최종 집계 157 에 포함)', `${prior150.length}/${prior150.length} PASS`, `${prior150.filter((x) => x.pass).length}/${prior150.length}`,
-        prior150.length === 139 && prior150.every((x) => x.pass));
+      rec(7, '(au) 기존 7행까지 140건 전부 통과(8행 기존 11건=최종 집계 158 에 포함)', `${prior150.length}/${prior150.length} PASS`, `${prior150.filter((x) => x.pass).length}/${prior150.length}`,
+        prior150.length === 140 && prior150.every((x) => x.pass));
       // (av)~(ba) 정제본 매칭: URL·경로·코드·붙여넣기 제외, 앞 400자 (2026-10-10 결함 수정)
       const url = 'https://chatgpt.com/codex?app-landing-page=true';
       rec(7, '(av) URL 안 landing → 매칭 없음', 'null', String(m3(`이거 봐줘 ${url}`)), m3(`이거 봐줘 ${url}`) === null);
@@ -1105,11 +1113,11 @@ async function main() {
   }
 
 
-  // (bb) 기존 157건 전부 통과(정제 수정 전 집계)
+  // (bb) 기존 158건 전부 통과(정제 수정 전 집계)
   {
     const prior157 = results.filter((x) => !/^\((av|aw|ax|ay|az|ba)\)/.test(x.id));
-    rec(8, '(bb) 기존 157건 전부 통과', `${prior157.length}/${prior157.length} PASS(157건)`, `${prior157.filter((x) => x.pass).length}/${prior157.length}`,
-      prior157.length === 157 && prior157.every((x) => x.pass));
+    rec(8, '(bb) 기존 158건 전부 통과', `${prior157.length}/${prior157.length} PASS(158건)`, `${prior157.filter((x) => x.pass).length}/${prior157.length}`,
+      prior157.length === 158 && prior157.every((x) => x.pass));
   }
 
   // ---------- 9행 배포용 일반화: 영어 모드·ROOT/LANG 설정 파일·설치기 신규 모드 ----------

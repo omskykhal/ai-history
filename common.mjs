@@ -26,6 +26,20 @@ export function parseAgent(argv = process.argv) {
 }
 export const AGENT = parseAgent();
 
+// The only environment variables the hooks read. Everything else in the host environment (tokens, API keys,
+// other tools' settings) is never looked at: every hook builds its `env` with hookEnv() instead of using process.env.
+export const ENV_KEYS = [
+  'AUTO_HISTORY_ROOT', 'AUTO_HISTORY_LANG', 'AUTO_HISTORY_DIRNAME', 'AUTO_HISTORY_DISABLE', 'AUTO_HISTORY_NO_BLOCK',
+  'AUTO_HISTORY_CONF_DIR', 'AUTO_HISTORY_STATE_DIR', 'AUTO_HISTORY_KEEP_DAYS', 'AUTO_HISTORY_ARCHIVE_DAYS', 'AUTO_HISTORY_SESSIONS_DAYS',
+  'CLAUDE_CODE_ENTRYPOINT', 'CLAUDE_PROJECT_DIR', 'CLAUDE_PLUGIN_ROOT', 'CLAUDE_PLUGIN_DATA', 'CLAUDECODE', 'CLAUDE_CODE_SESSION_ID',
+  'CLAUDE_CODE_SESSION_ATTENDED', 'CLAUDE_CODE_CHILD_SESSION', 'AI_AGENT',
+];
+export function hookEnv(src = process.env) {
+  const e = {};
+  for (const k of ENV_KEYS) if (src[k] !== undefined) e[k] = src[k];
+  return e;
+}
+
 // Overrides (tests / plugin mode): AUTO_HISTORY_STATE_DIR (state), AUTO_HISTORY_CONF_DIR (conf files, dumps).
 // In Claude Code plugin mode CLAUDE_PLUGIN_DATA survives plugin updates, so it is preferred over the plugin dir.
 export function getConfDir(env = process.env) {
@@ -175,7 +189,8 @@ export function maskDeep(v) {
   return v;
 }
 
-function nestedMarkerHit(file, env) {
+// NESTED_MARKERS lines are `NAME=value`: the variable named by the user is compared with the value and nothing else is done with it.
+function nestedMarkerHit(file, env, src = process.env) {
   const markers = readListFile(path.join(getConfDir(env), file));
   if (!markers) return false;
   for (const line of markers) {
@@ -183,7 +198,9 @@ function nestedMarkerHit(file, env) {
     if (i <= 0) continue;
     const name = line.slice(0, i).trim();
     const val = line.slice(i + 1).trim();
-    if (env[name] !== undefined && env[name] === val) return true;
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) continue;
+    const cur = env[name] !== undefined ? env[name] : src[name];
+    if (cur !== undefined && cur === val) return true;
   }
   return false;
 }
@@ -765,7 +782,8 @@ export function oneLine(s, max) {
   return max && x.length > max ? x.slice(0, max) : x;
 }
 
-// Debug dump: only when DUMP_INPUTS (codex: DUMP_INPUTS_CODEX) exists in the conf dir and the call passed the scope check
+// Debug dump: only when DUMP_INPUTS (codex: DUMP_INPUTS_CODEX) exists in the conf dir and the call passed the scope check.
+// Only the fixed `keys` below are written (masked); no other environment variable is read or recorded.
 export function maybeDump(event, data, env = process.env, agent = AGENT) {
   try {
     if (!confFileExists(agentConfName('DUMP_INPUTS', agent), env)) return;
@@ -777,7 +795,6 @@ export function maybeDump(event, data, env = process.env, agent = AGENT) {
       'CLAUDE_CODE_SESSION_ATTENDED', 'CLAUDE_CODE_CHILD_SESSION', 'AI_AGENT'];
     const e = {};
     for (const k of keys) e[k] = env[k] === undefined ? null : mask(env[k]);
-    if (agent === 'codex') for (const k of Object.keys(env).filter((x) => /^CODEX/i.test(x))) e[k] = mask(String(env[k]));
     fs.writeFileSync(path.join(dir, `${agent === 'claude' ? '' : `${agent}-`}${event}-${ts}.json`),
       JSON.stringify({ agent, argv: process.argv.slice(2), stdin: maskDeep(data), env: e, processCwd: process.cwd() }, null, 2), 'utf-8');
   } catch (e) {

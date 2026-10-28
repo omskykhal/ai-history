@@ -13,7 +13,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { getRoot, getConfDir, lang as resolveLang, historyDirName, DEFAULT_ROOT, retentionPolicy } from './common.mjs';
+import { getRoot, getConfDir, lang as resolveLang, historyDirName, DEFAULT_ROOT, retentionPolicy, hookEnv } from './common.mjs';
 import { LANGS } from './i18n.mjs';
 
 const HOOK_DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -131,7 +131,7 @@ function applyConfig(args, dry) {
   // RETENTION (keep / archive / sessions, days; 0 = off). Unspecified keys keep their current (file or default) value.
   const retArgs = [['--keep-days', 'keep'], ['--archive-days', 'archive'], ['--sessions-days', 'sessions']];
   if (retArgs.some(([k]) => args.includes(k))) {
-    const pol = retentionPolicy({ ...process.env, AUTO_HISTORY_KEEP_DAYS: undefined, AUTO_HISTORY_ARCHIVE_DAYS: undefined, AUTO_HISTORY_SESSIONS_DAYS: undefined });
+    const pol = retentionPolicy({ ...hookEnv(), AUTO_HISTORY_KEEP_DAYS: undefined, AUTO_HISTORY_ARCHIVE_DAYS: undefined, AUTO_HISTORY_SESSIONS_DAYS: undefined });
     for (const [k, key] of retArgs) {
       const v = argVal(args, k);
       if (v === null) { if (args.includes(k)) throw new Error(`${k} needs a value (whole number of days, 0 = off)`); continue; }

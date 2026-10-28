@@ -1,8 +1,8 @@
 // PreToolUse hook: log the tool call start.
-import { runHook, readInput, resolveAnchor, appendLog, maybeDump, summarizeTool } from './common.mjs';
+import { runHook, readInput, hookEnv, resolveAnchor, appendLog, maybeDump, summarizeTool } from './common.mjs';
 
 runHook(async () => {
-  const env = process.env;
+  const env = hookEnv();
   if (env.AUTO_HISTORY_DISABLE === '1') return;
   const data = await readInput();
   if (!data || !data.session_id) return;
