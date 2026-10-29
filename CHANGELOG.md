@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.5.0 — 2026-10-29
+
+MD checklist, a second page tab, result pickup from Codex, and the `/tracker-test` verification loop. `TRACKER.json` stays version 1 (only optional fields added). No new hook events; the installer and `hooks/hooks.json` are unchanged.
+
+- MD checklist: `Stop` writes `.ai-history/tracker/CHECKLIST.md` from the same `TRACKER.json` whenever it merges a block (new `tracker-md.mjs`). Same data → same bytes; the results section (`<!-- RESULTS:BEGIN/END -->`) is always generated empty.
+- `.ai-history/tracker/.gitignore` (one line `*`) is written when missing.
+- Result pickup: (1) a TRACKER block at the end of a Codex reply is stored with `ai.by: "codex"`; (2) results written into the checklist's results section are picked up at the next `Stop` (content hash `mdHash` / `mdSeenHash`, only existing ids, only `ai`); a broken section logs `[TRACKER] md parse error` once and keeps `tracker/CHECKLIST.edited-<time>.md`; (3) text pasted on the page is stored in the Artifact db `inbox/<ts>`, and the session-start db read now also covers `inbox` through `tracker-md.mjs parse --tracker` (existing ids' `ai` only) and marks documents with `processedAt`.
+- `items[].ai.by` (optional, `claude` | `codex`). A block that differs only in `by` is not a change. Tracker rules now say to leave out `ai` for items you did not verify.
+- Tracker page: tabs "Page" / "MD" (checklist text, Copy, item checks on the same `checks/<id>`, "Paste Codex results" → `inbox`), `(codex)` / `(claude)` next to the AI check.
+- `/tracker-test`: new `agents/tracker-verifier.md` and `skills/tracker-test/SKILL.md`. One round per turn, foreground parallel sub-agents, one TRACKER block at the end, up to 3 rounds (`last-run.json`). HTTP checks run only the dev-harness `.harness.json` `live_check` command; without it HTTP items are reported as not checkable.
+- `test/check-global-sync.mjs` (not part of `npm test`): sha1 comparison of the plugin's agent / skill with copies in `~/.claude`.
+- New i18n keys (ko / en) for the checklist, log lines, the inbox wording and the page tabs. The TRACKER block example no longer carries `"ai":{"status":"-","note":""}`.
+- The tracker instruction ends with `Tracker tool: node "<abs path>/tracker-md.mjs"` (Korean: `트래커 도구:`); the session-start db read gives absolute paths for `parse --tracker`.
+- `.ai-history/tracker/CHECKLIST.md` results are merged before the turn's block, then `TRACKER.json` is written once and HTML / md are built once. If md results and a `{"url":…}` block arrive in the same `Stop`, `publishedHash` is the HTML from before the rebuild and `pending` stays on.
+- Page JSON escapes U+2028 / U+2029. Log retention tolerates a marker mtime up to 1 s after "now" (fractional file-system ms).
+- Tests: 263 cases (+37, row 13: checklist builder, result pickup paths, parser limits, inbox injection filter, template tabs, UI-label rule, English mode, skill / agent files).
+
 ## 0.4.1 — 2026-10-28
 
 Plugin-directory review follow-up (automated scan notes "reads a credential from the user's environment" and "downloads code and runs it"). No feature change.

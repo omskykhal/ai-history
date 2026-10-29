@@ -15,6 +15,18 @@
 5. **다른 PC 1대에서 설치 리허설**(가능하면): clone → `install.mjs --install --root … --lang en` → Claude Code 새 세션에서 `[Status]` 보고 확인 → `--codex-hooks` → Codex 에서 확인. Windows 외 OS 는 "미검증"이므로 README 문구를 유지하거나, 리허설 후 문구를 바꾸세요.
 6. **GitHub 저장소 생성 후 push** → Release `v0.1.0` 태그.
 
+### 1-1. 0.5.0 추가 확인(2026-10-29)
+
+0.5.0 은 훅 외에 `agents/tracker-verifier.md`·`skills/tracker-test/SKILL.md` 를 함께 배포합니다(`/tracker-test` 검증 루프). `hooks/hooks.json` 은 새 이벤트가 없어 변경 없음.
+
+1. **매니페스트 검증**: `claude plugin validate .` → `Validation passed`. 실패하면 커밋·배포하지 않습니다.
+2. **시험**: `node test/run-tests.mjs <scratch-dir>` → `TOTAL 263/263 PASS`(0.4.1 의 226 + 0.5.0 13행 37건, 2026-10-29 확인).
+3. **전역 사본 일치**(이 PC 처럼 `~/.claude/agents`·`~/.claude/skills/tracker-test` 에 사본을 두는 경우): `node test/check-global-sync.mjs` → `SYNC OK 2/2`. 플러그인 리포가 정본이고 전역은 복사본입니다.
+4. **스킬 호출 이름**: 플러그인 설치 시 `/tracker-test` 와 `/ai-history:tracker-test` 중 어느 쪽으로 불리는지, SKILL.md 본문의 `${CLAUDE_PLUGIN_ROOT}` 가 치환되는지는 **미확인**. 그래서 스킬은 훅이 지시문에 넣는 `tracker-md.mjs` 절대경로 1줄을 쓰고, README 에는 두 이름을 함께 적었습니다.
+5. **HTTP 검증 수단**: 플러그인은 자체 HTTP 검사 도구를 넣지 않습니다. 사용자 프로젝트에 dev-harness `.harness.json` `live_check` 가 없으면 HTTP 검증 불가(README 명시).
+6. **서브에이전트 Bash 권한**: `tracker-verifier` 는 `node … live-check.mjs …` 1개를 Bash 로 실행합니다. 사용자 권한 설정에 따라 묻거나 거부될 수 있음(README 에 허용 규칙 예시).
+7. **push·태그·릴리스**는 저장소 소유자 승인 후.
+
 ## 2. 어디에 배포하나
 
 | 채널 | 왜 | 어떻게 | 확인 상태 |
@@ -121,4 +133,5 @@ v0.1.0 — 첫 공개
 
 - 이슈 템플릿은 없습니다. 첫 이슈가 들어오면 "OS / Node 버전 / `node install.mjs --status` 출력 / `DUMP_INPUTS` 덤프 1건" 을 요청하면 원인 파악에 충분합니다.
 - 버전 올릴 때 `package.json`·`.claude-plugin/plugin.json`·`.claude-plugin/marketplace.json`·`CHANGELOG.md` 네 곳을 같이 바꾸세요.
+- `agents/`·`skills/` 를 고치면 전역 사본도 다시 복사하고 `node test/check-global-sync.mjs` 로 확인하세요.
 - 이 PC 의 라이브 훅(`~/.claude/hooks/auto-history/`)은 이 저장소와 별개입니다. 저장소를 고쳐도 라이브는 바뀌지 않고, 라이브를 고쳐도 저장소는 바뀌지 않습니다.

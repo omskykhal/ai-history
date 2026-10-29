@@ -4,10 +4,12 @@ import path from 'node:path';
 import {
   runHook, readInput, hookEnv, emit, resolveAnchor, isInteractive, statePaths, writeState, removeFile, appendLog,
   maybeDump, mask, oneLine, confFileExists, historyDir, writeAtomic, statusFormatFor, statusHeader, missingHeadings,
-  agentConfName, t, sessionStatusPath, AGENT,
+  agentConfName, t, sessionStatusPath, AGENT, ymd, hms,
   extractTracker, trackerEligibility, mergeTracker, writeTracker, emptyTracker, TRACKER_URL_RE, trackerFormatFor, trackerRulesFor, PUBLISH_INSTRUCTION,
+  trackerMdPath,
 } from './common.mjs';
-import { writeTrackerHtml } from './tracker-build.mjs';
+import { writeTrackerHtml, writeTrackerMd, sha12 } from './tracker-build.mjs';
+import { parseChecklistResults } from './tracker-md.mjs';
 
 const BEGIN_RE = /^<!-- STATUS:BEGIN -->\r?$/;
 const END_RE = /^<!-- STATUS:END -->\r?$/;
@@ -213,45 +215,97 @@ runHook(async () => {
   }
 });
 
-// Apply a TRACKER block → TRACKER.json and the page HTML. Returns true when this block saved a published url.
-function processTracker(anchor, data, tr, env, sid8) {
-  if (!tr || !tr.found) return false;
+// md step: when CHECKLIST.md differs from what the hook wrote (edited) and this content was not handled yet,
+// parse its results section → merge ai (by codex). Returns null = nothing to do / { json, changed } (json carries mdSeenHash).
+function mdStage(anchor, data, json, env, now) {
   const L = t(env);
-  if (tr.error) { appendLog(anchor, data, L.logTrackerJsonError, env); return false; }
-  const block = tr.json;
+  const file = trackerMdPath(anchor, env);
+  let text;
+  try { text = fs.readFileSync(file, 'utf-8'); } catch { return null; }
+  const h = sha12(text);
+  if (h === json.mdHash || h === json.mdSeenHash) return null;
+  let j = JSON.parse(JSON.stringify(json));
+  j.mdSeenHash = h;
+  const p = parseChecklistResults(text, j);
+  if (p.error) {
+    appendLog(anchor, data, L.logMdParseError, env);
+    try { // keep the edited copy (never overwrite or delete)
+      const d = new Date();
+      const base = path.join(path.dirname(file), `CHECKLIST.edited-${ymd(d).replace(/-/g, '')}-${hms(d).replace(/:/g, '')}`);
+      let out = `${base}.md`;
+      for (let i = 2; fs.existsSync(out); i++) out = `${base}-${i}.md`;
+      fs.copyFileSync(file, out, fs.constants.COPYFILE_EXCL);
+    } catch { /* fail-open */ }
+    return { json: j, changed: false };
+  }
+  if (!p.count) return { json: j, changed: false };
+  const m = mergeTracker(j, p.block, { by: 'codex-md', now });
+  j = m.json;
+  appendLog(anchor, data, L.logMdMerged(p.count, p.ignored), env);
+  return { json: j, changed: m.changed };
+}
+
+// md results → turn block, merged one after the other, then TRACKER.json written once and HTML / md built once.
+// Returns true when this block saved a published url. The md step runs first, whether or not there is a block or a JSON error
+// (not for off / legacy / global TRACKER_OFF).
+function processTracker(anchor, data, tr, env, sid8) {
+  const L = t(env);
   const elig = trackerEligibility(anchor, env);
   const now = new Date().toISOString();
-  if (elig.reason === 'TRACKER_OFF') { appendLog(anchor, data, L.logTrackerIgnored, env); return false; }
-  if (block.mode === 'off') {
-    const j = elig.json || emptyTracker(now);
-    j.mode = 'off';
-    j.updatedAt = now;
-    writeTracker(anchor, j, env);
-    appendLog(anchor, data, L.logTrackerOff, env);
-    return false;
+  let j = null; // working copy for this Stop (null = nothing to write)
+  let changed = false;
+  let userOnly = false;
+  if (elig.mode === 'on' && elig.json) {
+    const md = mdStage(anchor, data, elig.json, env, now);
+    if (md) { j = md.json; changed = md.changed; }
   }
-  if ((elig.mode === 'off' || elig.mode === 'legacy') && block.mode !== 'on') {
-    appendLog(anchor, data, L.logTrackerIgnored, env);
-    return false;
+  let urlSaved = false;
+  if (tr && tr.found) {
+    if (tr.error) appendLog(anchor, data, L.logTrackerJsonError, env);
+    else {
+      const block = tr.json;
+      if (elig.reason === 'TRACKER_OFF') { appendLog(anchor, data, L.logTrackerIgnored, env); return false; }
+      if (block.mode === 'off') {
+        const o = j || elig.json || emptyTracker(now);
+        o.mode = 'off';
+        o.updatedAt = now;
+        writeTracker(anchor, o, env);
+        appendLog(anchor, data, L.logTrackerOff, env);
+        return false;
+      }
+      if ((elig.mode === 'off' || elig.mode === 'legacy') && block.mode !== 'on') {
+        appendLog(anchor, data, L.logTrackerIgnored, env);
+        return false;
+      }
+      const m = mergeTracker(j || elig.json, block, { by: `${AGENT}-${sid8}`, now });
+      j = m.json;
+      j.mode = 'on';
+      changed = changed || m.changed;
+      userOnly = m.userOnly;
+      const url = typeof block.url === 'string' ? block.url.trim() : '';
+      if (url && TRACKER_URL_RE.test(url)) urlSaved = true;
+      if (m.changed || m.userOnly) appendLog(anchor, data, L.logTrackerItems(m.added, m.updated, m.removed, m.userOnly), env);
+    }
   }
-  const m = mergeTracker(elig.json, block, { by: `${AGENT}-${sid8}`, now });
-  const j = m.json;
-  j.mode = 'on';
-  if (m.changed) {
+  if (!j) return false;
+  // Build policy: content changed → HTML + md + pending / user verdicts only → md only (HTML unchanged, no pending) / no template → md still written
+  if (changed) {
     const hash = writeTrackerHtml(anchor, j, env);
     if (hash) { j.htmlHash = hash; j.pending = true; }
   }
-  let urlSaved = false;
-  const url = typeof block.url === 'string' ? block.url.trim() : '';
-  if (url && TRACKER_URL_RE.test(url)) {
-    j.url = url;
-    j.pending = false;
+  if (changed || userOnly) {
+    const mh = writeTrackerMd(anchor, j, env);
+    if (mh) j.mdHash = mh;
+  }
+  if (urlSaved) {
+    // What was published is the HTML from before this Stop's rebuild. If md results rebuilt it in this Stop, pending stays (next publish request)
+    const pubHash = (elig.json && elig.json.htmlHash) || j.htmlHash || null;
+    j.url = tr.json.url.trim();
     j.publishedAt = now;
-    j.publishedHash = j.htmlHash || null;
-    urlSaved = true;
+    j.publishedHash = pubHash;
+    j.pending = !!j.htmlHash && j.htmlHash !== pubHash;
   }
   writeTracker(anchor, j, env);
-  if (m.changed || m.userOnly) appendLog(anchor, data, L.logTrackerItems(m.added, m.updated, m.removed, m.userOnly), env);
   if (urlSaved) appendLog(anchor, data, L.logTrackerUrl, env);
   return urlSaved;
 }

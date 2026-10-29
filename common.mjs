@@ -603,7 +603,8 @@ export function runRetention(anchor, env = process.env, opts = {}) {
     const now = typeof opts.now === 'number' ? opts.now : Date.now();
     const marker = path.join(hdir, RETENTION_MARKER);
     if (!opts.force) {
-      try { const age = now - fs.statSync(marker).mtimeMs; if (age >= 0 && age < RETENTION_INTERVAL_MS) return res; } catch { /* no marker → run */ }
+      // mtimeMs has fractional ms (file-system clock), Date.now() is whole ms → a marker written just now can show age ≈ -1ms; allow 1s
+      try { const age = now - fs.statSync(marker).mtimeMs; if (age >= -1000 && age < RETENTION_INTERVAL_MS) return res; } catch { /* no marker → run */ }
     }
     res.ran = true;
     const pol = retentionPolicy(env);
@@ -860,12 +861,16 @@ const TRACKER_SKIP_DIRS = ['.ai-history', '.omc', '.claude', 'node_modules', '.g
 
 // Block format / wording rules in the active language (default-env constants kept for direct use).
 export function trackerFormatFor(env = process.env) { return t(env).trackerFormat; }
-export function trackerRulesFor(env = process.env) { return t(env).trackerRules; }
+export function trackerRulesFor(env = process.env) { const L = t(env); return `${L.trackerRules} ${L.trackerRulesKeepAi}`; }
 export const TRACKER_FORMAT = trackerFormatFor();
 export const TRACKER_RULES = trackerRulesFor();
 
 export function trackerPath(anchor, env = process.env) { return path.join(historyDir(anchor, env), TRACKER_FILE); }
 export function trackerHtmlPath(anchor, env = process.env) { return path.join(historyDir(anchor, env), ...TRACKER_HTML_REL.split('/')); }
+// §21 MD checklist (built by the hook; only its results section is filled in by people / Codex)
+export const TRACKER_MD_REL = 'tracker/CHECKLIST.md';
+export function trackerMdPath(anchor, env = process.env) { return path.join(historyDir(anchor, env), ...TRACKER_MD_REL.split('/')); }
+export const TRACKER_MD_TOOL = path.join(HOOK_DIR, 'tracker-md.mjs');
 
 export function readTracker(anchor, env = process.env) {
   try {
@@ -963,6 +968,7 @@ export function extractTracker(msg) {
 
 const tStr = (v) => (typeof v === 'string' ? v.slice(0, TRACKER_STR_MAX) : null);
 const AI_STATUS = ['ok', 'fail', '-'];
+const AI_BY = ['claude', 'codex'];
 const USER_STATUS = ['ok', 'fail', ''];
 export function emptyTracker(now = new Date().toISOString()) {
   return {
@@ -1035,7 +1041,9 @@ export function mergeTracker(json, block, opts = {}) {
         const old = cur.ai && typeof cur.ai === 'object' ? cur.ai : { status: '-', note: '', at: null };
         const st = AI_STATUS.includes(it.ai.status) ? it.ai.status : '-';
         const note = tStr(it.ai.note);
-        const nx = { status: st, note: note !== null ? note : (old.note || ''), at: tStr(it.ai.at) || now };
+        // §21 ai.by (claude|codex, anything else → AGENT). Compared on status·note only: a different by alone is not a change and is not stored
+        const aiBy = AI_BY.includes(it.ai.by) ? it.ai.by : AGENT;
+        const nx = { status: st, note: note !== null ? note : (old.note || ''), at: tStr(it.ai.at) || now, by: aiBy };
         if (nx.status !== old.status || nx.note !== (old.note || '')) { cur.ai = nx; itemChanged = true; }
       }
       if (it.user && typeof it.user === 'object') {
@@ -1140,7 +1148,7 @@ export function trackerDbReadInstruction(anchor, env = process.env) {
     if (confFileExists('TRACKER_OFF', env)) return '';
     const j = readTracker(anchor, env);
     if (!j || j.mode === 'off' || typeof j.url !== 'string' || !TRACKER_URL_RE.test(j.url)) return '';
-    return t(env).trackerDbRead(j.url);
+    return t(env).trackerDbRead(j.url, TRACKER_MD_TOOL, trackerPath(anchor, env));
   } catch {
     return '';
   }
@@ -1153,7 +1161,7 @@ export function trackerInstruction(elig, json, agent = AGENT, anchor = elig && e
     if (!elig || elig.reason === 'TRACKER_OFF') return '';
     const L = t(env);
     if (elig.mode === 'legacy' || elig.mode === 'off') return L.trackerOffHint;
-    const parts = [L.trackerOn(historyDirName(env), TRACKER_FILE, trackerFormatFor(env), trackerRulesFor(env))];
+    const parts = [`${L.trackerOn(historyDirName(env), TRACKER_FILE, trackerFormatFor(env), trackerRulesFor(env))}\n${L.trackerTool} node "${TRACKER_MD_TOOL}"`];
     const j = json || (elig && elig.json);
     if (elig.mode === 'on' && j && j.pending && agent === 'claude' && anchor) parts.push(PUBLISH_INSTRUCTION(anchor, j, env));
     return parts.join('\n\n');

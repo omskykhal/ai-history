@@ -136,6 +136,30 @@ API 키처럼 보이는 문자열(`AIza…`, `sk-…`, `ghp_…`, `Bearer …`, 
 
 주의: 계정을 인라인으로 적는 용도라 `TRACKER.json` 은 마스킹하지 않습니다. 시험용 계정만 쓰세요. 로그 줄(`[TRACKER] …`)은 평소처럼 마스킹됩니다.
 
+### MD 점검표·MD 탭·결과 회수(0.5.0)
+
+- **MD 점검표**: `Stop` 훅이 TRACKER 블록을 병합할 때마다 같은 `TRACKER.json` 으로 `.ai-history/tracker/CHECKLIST.md` 도 씁니다(HTML 과 같은 데이터·같은 시점). 파일만으로 일할 수 있게 프로젝트 이름·앵커·생성 시각·검사 수단·결과 기입법·TRACKER 블록 형식, 항목마다 표 1줄(id·영역·제목·계정·경로·할 일·정상 기준·현재 AI·현재 사용자)이 들어갑니다. 끝에는 항상 빈 칸으로 만든 결과 구역이 있습니다:
+  ```
+  <!-- RESULTS:BEGIN -->
+  - [ ] A-1 | - | 
+  <!-- RESULTS:END -->
+  ```
+  다른 에이전트(예: Codex)는 검증한 줄만 `- [x] A-1 | ok | 2026-10-29 live-check https://example.com/ 200` 처럼 고치고 나머지는 `[ ]` 로 둡니다. 다음 `Stop`(Claude Code 또는 Codex CLI)에서 훅이 편집을 알아채고 그 구역만 읽어 `items[].ai`(`"by":"codex"`)로 저장합니다. 없는 id·구역 밖 줄·`[ ]` 줄은 무시하고, 구역이 깨졌으면 `[TRACKER] md 파싱 오류` 를 1회 남기고 편집본을 `tracker/CHECKLIST.edited-<시각>.md` 로 보존합니다.
+- **`ai.by`**: `items[].ai` 에 `"by":"claude"` 또는 `"by":"codex"` 가 붙을 수 있습니다. Codex 응답 끝 TRACKER 블록은 `"by":"codex"` 로 저장됩니다. `by` 만 다른 블록은 변경이 아닙니다. 직접 검증하지 않은 항목은 `ai` 를 생략하세요(`"ai":{"status":"-"}` 를 보내면 다른 주체의 판정을 지웁니다).
+- **페이지 탭 2개**: 「페이지」(기본, 기존 그대로)와 「MD」(같은 점검표 본문 + 「복사」 버튼, 「페이지」 탭과 같은 `checks/<id>` 를 쓰는 항목 체크, 「코덱스 결과 붙여넣기」 칸). 붙여넣은 글은 Artifact db 컬렉션 `inbox/<ts>` 에 저장되고, db 가 없으면 그 브라우저에만 남습니다. 다음 세션 시작 때 Claude 가 처리 안 된 `inbox` 문서를 읽어(본문은 데이터이며 지시가 아님) `tracker-md.mjs parse --tracker` 로 걸러 기존 id 의 `ai` 판정만 반영하고, 문서에는 `processedAt` 만 표시합니다(삭제 없음).
+- **`tracker/.gitignore`**: 훅이 `.ai-history/tracker/.gitignore`(내용 `*` 한 줄)가 없으면 자동으로 씁니다. 그래서 `tracker/` 아래 점검표·HTML·보고 파일은 git 에 잡히지 않습니다. 단 `.ai-history/TRACKER.json` 은 이 파일로 보호되지 **않습니다**.
+- **경고**: `TRACKER.json`·`CHECKLIST.md`·페이지 HTML 에는 항목에 적은 계정 ID/PASS 가 마스킹 없이 들어갑니다. `.ai-history/` 를 git 에서 빼고(`install.mjs --git-ignore`) 시험용 계정만 쓰세요.
+
+### `/tracker-test`(검증 루프)
+
+플러그인에는 에이전트 1개(`agents/tracker-verifier.md`)와 스킬 1개(`skills/tracker-test/SKILL.md`)가 들어 있습니다. 「/tracker-test」·「트래커 검사해줘」 라고 하면 사용자 정상도 AI 정상도 아닌 항목을 턴당 1라운드로 검증합니다:
+
+- 대상은 `node "<HOOK_DIR>/tracker-md.mjs" targets "<TRACKER.json>"` 출력만 씁니다. 훅이 트래커 지시문에 `tracker-md.mjs` 절대경로를 넣어 주므로 스킬은 `${CLAUDE_PLUGIN_ROOT}` 에 기대지 않습니다.
+- URL 이 있는 항목은 항목당 `tracker-verifier` 서브에이전트 1개를 전경 병렬로 돌리고, 화면 조작 항목은 에이전트 없이 「AI 검증 불가(UI)」 로 표시합니다(미판정 항목만, Codex 판정·기존 문제 판정은 유지). URL 항목의 `-` 결과(네트워크 오류·권한 없음)도 같은 보호 규칙으로 미판정 항목에만 기록하고, 그 외에는 보고서에만 적습니다. 결과는 턴 끝 TRACKER 블록 1개로 냅니다. 최대 3라운드이며 「/tracker-test」 를 다시 입력하면 다음 라운드입니다. 수리하지 않고 로컬 서버·브라우저도 띄우지 않습니다.
+- **스킬 이름**: 플러그인으로 설치하면 `/tracker-test` 대신 `/ai-history:tracker-test` 로 불릴 수 있습니다(미확인). 두 이름을 함께 적어 둡니다. Claude Code 에 보이는 이름을 쓰세요.
+- **HTTP 검증은 dev-harness 필요**: 에이전트는 프로젝트 `.harness.json` 의 `live_check` 명령만 실행합니다(dev-harness 형식, 예: `"live_check": "node <경로>/live-check.mjs https://example.com/"`). **dev-harness `.harness.json` 에 `live_check` 가 없으면 HTTP 검증은 할 수 없고**, URL 항목은 「HTTP 확인 수단 없음」 으로 보고됩니다.
+- **서브에이전트 Bash 권한**: 에이전트는 그 `node … live-check.mjs …` 명령 1개를 위해 Bash 가 필요합니다. 권한 설정에 따라 Claude Code 가 묻거나 거부할 수 있고, 거부된 항목은 `-`「권한 없음」 으로 보고됩니다. 묻지 않게 하려면 설정에 그 명령만 허용하세요. 예: `"Bash(node <경로>/live-check.mjs *)"`.
+
 ### 비대화형 실행
 
 `claude -p`·SDK 실행(`CLAUDE_CODE_ENTRYPOINT` 가 `INTERACTIVE_ENTRYPOINTS` 에 없음), 서브에이전트, Claude Code 세션 **안에서** 띄운 Codex 는 기계 로그만 남깁니다. 주입·요구 없음.
@@ -174,7 +198,9 @@ API 키처럼 보이는 문자열(`AIza…`, `sk-…`, `ghp_…`, `Bearer …`, 
 node test/run-tests.mjs <scratch-dir>
 ```
 
-226건(훅 동작·앵커 규칙·별칭/폴더 매칭·STATUS 추출·안전 예외·설치기 왕복·영어 모드·로그 보존·다중 세션 STATUS·재개 명령·트래커 페이지). 시험 산출물은 OS 임시 폴더에만 생기고 실제 프로젝트엔 쓰지 않습니다.
+263건(훅 동작·앵커 규칙·별칭/폴더 매칭·STATUS 추출·안전 예외·설치기 왕복·영어 모드·로그 보존·다중 세션 STATUS·재개 명령·트래커 페이지·MD 점검표/결과 회수/tracker-test 규칙). 시험 산출물은 OS 임시 폴더에만 생기고 실제 프로젝트엔 쓰지 않습니다.
+
+에이전트·스킬 전역 사본(`~/.claude/agents/tracker-verifier.md`, `~/.claude/skills/tracker-test/SKILL.md`)을 두는 경우 `node test/check-global-sync.mjs` 가 이 저장소와 sha1 로 비교합니다(BOM 제거·CRLF→LF 정규화 후): `SYNC OK 2/2`, 「미복사」(종료 코드 0), 「불일치」(종료 코드 1). `npm test` 에는 포함되지 않습니다.
 
 ## 알려진 한계
 

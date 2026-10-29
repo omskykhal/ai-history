@@ -113,6 +113,24 @@
   ul.notes { list-style: none; padding: 0; margin: 12px 0 0; display: grid; gap: 6px; font-size: 13.5px; }
   ul.notes li { background: var(--panel-2); border-radius: 8px; padding: 6px 10px; white-space: pre-wrap; }
   ul.notes .who { font-size: 11.5px; color: var(--faint); margin-right: 6px; }
+  /* tabs (Page / MD) */
+  [hidden] { display: none !important; }
+  .tabs { display: flex; gap: 4px; margin: 0 0 16px; border-bottom: 1px solid var(--line); }
+  .tabs button { font-size: 14px; font-weight: 700; padding: 8px 16px; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; background: none; color: var(--muted); cursor: pointer; }
+  .tabs button[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); }
+  section.mdbox { margin-top: 16px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; box-shadow: var(--shadow); min-width: 0; }
+  section.mdbox:first-child { margin-top: 0; }
+  section.mdbox h2 { font-size: 16px; margin: 0 0 8px; }
+  .md-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 8px; }
+  .md-head h2 { margin: 0 !important; flex: 1 1 auto; min-width: 0; }
+  .md-head button { font-weight: 700; padding: 6px 16px; border-radius: 8px; border: 1px solid var(--accent); background: var(--accent); color: var(--bg); cursor: pointer; }
+  .md-head span { font-size: 12.5px; color: var(--muted); }
+  pre.md { margin: 0; font-family: var(--mono); font-size: 12.5px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; background: var(--panel-2); border-radius: 10px; padding: 10px 12px; max-height: 70vh; overflow: auto; }
+  .mdc-row { padding: 6px 0; border-top: 1px solid var(--line); }
+  .mdc-row:first-child { border-top: 0; }
+  .mdc-row .cid { font-family: var(--mono); font-size: 12px; color: var(--accent-deep); background: var(--accent-soft); border-radius: 6px; padding: 1px 7px; }
+  .mdc-row .lbl { flex: 1 1 160px; min-width: 0; font-size: 13.5px; }
+  section.mdbox textarea { width: 100%; min-height: 120px; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line-strong); background: var(--bg); resize: vertical; }
   @media (max-width: 480px) {
     .wrap { padding: 16px 16px 56px; }
     .chips { grid-template-columns: minmax(0, 1fr); }
@@ -124,6 +142,11 @@
 </head>
 <body>
 <div class="wrap">
+  <nav class="tabs" id="tabs" role="tablist">
+    <button type="button" role="tab" data-tab="page" aria-selected="true" id="tabPageBtn"></button>
+    <button type="button" role="tab" data-tab="md" aria-selected="false" id="tabMdBtn"></button>
+  </nav>
+  <div id="tabPage">
   <header class="top">
     <div>
       <div class="kicker" id="kicker"></div>
@@ -154,6 +177,22 @@
     <div class="memo-row"><button type="button" id="memoSave"></button><span id="memoState"></span></div>
     <ul class="notes" id="notes"></ul>
   </section>
+  </div>
+  <div id="tabMd" hidden>
+    <section class="mdbox">
+      <div class="md-head"><h2 id="mdHead"></h2><button type="button" id="mdCopy"></button><span id="mdCopyState"></span></div>
+      <pre class="md" id="mdText"></pre>
+    </section>
+    <section class="mdbox">
+      <h2 id="mdChecksHead"></h2>
+      <div id="mdChecks"></div>
+    </section>
+    <section class="mdbox">
+      <h2 id="inboxHead"></h2>
+      <textarea id="inbox" maxlength="20000"></textarea>
+      <div class="memo-row"><button type="button" id="inboxSave"></button><span id="inboxState"></span></div>
+    </section>
+  </div>
 </div>
 <script>
 var D = /*__TRACKER_DATA__*/null;
@@ -190,7 +229,7 @@ var D = /*__TRACKER_DATA__*/null;
     if (c && (!u.at || String(c.at || '') >= String(u.at || ''))) return { status: c.status || '', note: c.note || '', at: c.at || '' };
     return { status: u.status || '', note: u.note || '', at: u.at || '' };
   }
-  function aiOf(it) { var a = it.ai || {}; return { status: a.status === 'ok' || a.status === 'fail' ? a.status : '-', note: a.note || '', at: a.at || '' }; }
+  function aiOf(it) { var a = it.ai || {}; return { status: a.status === 'ok' || a.status === 'fail' ? a.status : '-', note: a.note || '', at: a.at || '', by: a.by === 'codex' || a.by === 'claude' ? a.by : '' }; }
 
   function setSync(s, cls) { var w = document.getElementById('sync'); if (w) { w.textContent = s; w.className = 'sync ' + (cls || ''); } }
 
@@ -202,6 +241,10 @@ var D = /*__TRACKER_DATA__*/null;
     setText('memoHead', tx('memoHead'));
     setText('memoSave', tx('memoSave'));
     var ta = document.getElementById('memo'); if (ta) ta.setAttribute('placeholder', tx('memoPlaceholder'));
+    setText('tabPageBtn', tx('tabPage')); setText('tabMdBtn', tx('tabMd'));
+    setText('mdHead', tx('mdTabHead')); setText('mdCopy', tx('copy')); setText('mdChecksHead', tx('mdChecksHead'));
+    setText('inboxHead', tx('inboxHead')); setText('inboxSave', tx('inboxSave'));
+    var ib = document.getElementById('inbox'); if (ib) ib.setAttribute('placeholder', tx('inboxPlaceholder'));
     setSync(tx('syncConnecting'), '');
   }
   function renderHead() {
@@ -242,7 +285,7 @@ var D = /*__TRACKER_DATA__*/null;
     return '<article class="card" id="item-' + esc(it.id) + '" data-id="' + esc(it.id) + '">' +
       '<div class="c-head"><span class="cid">' + esc(it.id) + '</span><h3>' + esc(it.title || tx('noTitle')) + '</h3><span class="pill ' + (u.status || '') + '">' + esc(tx('userPrefix')) + ' ' + esc(UST[u.status || '']) + '</span></div>' +
       '<dl class="f"><dt>' + esc(tx('account')) + '</dt><dd>' + val(it.account) + '</dd><dt>' + esc(tx('path')) + '</dt><dd>' + val(it.path) + '</dd><dt>' + esc(tx('todo')) + '</dt><dd>' + val(it.todo) + '</dd><dt>' + esc(tx('expect')) + '</dt><dd>' + val(it.expect) + '</dd></dl>' +
-      '<div class="ai">' + esc(tx('aiLabel')) + ' <span class="pill ' + (a.status === '-' ? '' : a.status) + '">' + esc(AST[a.status]) + '</span>' + (a.note ? ' ' + esc(a.note) : '') + (a.at ? ' <span class="at">(' + esc(fmt(a.at)) + ')</span>' : '') + '</div>' +
+      '<div class="ai">' + esc(tx('aiLabel')) + ' <span class="pill ' + (a.status === '-' ? '' : a.status) + '">' + esc(AST[a.status]) + '</span>' + (a.by ? ' ' + esc(tx('aiBy', { by: a.by })) : '') + (a.note ? ' ' + esc(a.note) : '') + (a.at ? ' <span class="at">(' + esc(fmt(a.at)) + ')</span>' : '') + '</div>' +
       '<div class="judge"><span class="lab">' + esc(tx('judgeLabel')) + '</span>' + btn('ok', tx('ok')) + btn('fail', tx('fail')) + btn('', tx('unchecked')) +
       '<input type="text" class="note" maxlength="600" placeholder="' + esc(tx('notePlaceholder')) + '" value="' + esc(u.note) + '">' +
       (u.at ? '<span class="at">' + esc(fmt(u.at)) + '</span>' : '') + '</div></article>';
@@ -281,7 +324,20 @@ var D = /*__TRACKER_DATA__*/null;
     rows.sort(function (x, y) { return String(y.at || '').localeCompare(String(x.at || '')); });
     document.getElementById('notes').innerHTML = rows.slice(0, 20).map(function (r) { return '<li><span class="who">' + esc(r.who) + ' · ' + esc(fmt(r.at)) + '</span>' + esc(r.text) + '</li>'; }).join('');
   }
-  function renderAll() { renderHead(); renderChips(); renderList(); renderTree(); renderNotes(); }
+  // MD tab: full checklist text (D.md, as of the build) + item checks (same checks/<id>)
+  function renderMdText() { document.getElementById('mdText').textContent = D.md ? String(D.md) : tx('mdMissing'); }
+  function renderMdChecks() {
+    var box = document.getElementById('mdChecks'), html = [];
+    areaOrder().forEach(function (aid) {
+      ITEMS.filter(function (it) { return it.area === aid; }).forEach(function (it) {
+        var u = userOf(it);
+        var btn = function (act, label) { return '<button type="button" data-act="' + act + '" aria-pressed="' + (u.status === act ? 'true' : 'false') + '">' + esc(label) + '</button>'; };
+        html.push('<div class="judge mdc-row" data-id="' + esc(it.id) + '"><span class="cid">' + esc(it.id) + '</span><span class="lbl">' + esc(it.title || tx('noTitle')) + '</span>' + btn('ok', tx('ok')) + btn('fail', tx('fail')) + btn('', tx('unchecked')) + '</div>');
+      });
+    });
+    box.innerHTML = html.join('') || '<div class="empty">' + esc(tx('emptyAll')) + '</div>';
+  }
+  function renderAll() { renderHead(); renderChips(); renderList(); renderTree(); renderNotes(); renderMdText(); renderMdChecks(); }
 
   // db: one subscription per item, one write per change
   function subscribe(id) {
@@ -293,7 +349,7 @@ var D = /*__TRACKER_DATA__*/null;
           if (!loc || String(d.at || '') >= String(loc.at || '')) { CHECKS[id] = { status: d.status || '', note: d.note || '', at: d.at || '', by: d.by || '' }; saveLocal(); }
         }
         setSync(tx('syncOn'), 'on');
-        renderChips(); renderList(); renderTree();
+        renderChips(); renderList(); renderTree(); renderMdChecks();
       }, function (err) { UNSUB[id] = null; setSync(tx('syncErr', code(err)), 'off'); });
     } catch (e) { setSync(tx('syncErr', code(null)), 'off'); }
   }
@@ -331,7 +387,7 @@ var D = /*__TRACKER_DATA__*/null;
     var b = e.target.closest('.judge button'); if (!b) return;
     var card = b.closest('.card'); if (!card) return;
     writeCheck(card.getAttribute('data-id'), { status: b.getAttribute('data-act') || '' });
-    renderChips(); renderList(); renderTree();
+    renderChips(); renderList(); renderTree(); renderMdChecks();
   });
   function noteCommit(inp) {
     var card = inp.closest('.card'); if (!card) return;
@@ -353,8 +409,64 @@ var D = /*__TRACKER_DATA__*/null;
   });
   document.getElementById('memoSave').addEventListener('click', saveMemo);
 
+  // tabs: state lives in location.hash (#md) only
+  function showTab(t) {
+    var md = t === 'md';
+    document.getElementById('tabPage').hidden = md;
+    document.getElementById('tabMd').hidden = !md;
+    Array.prototype.forEach.call(document.querySelectorAll('#tabs button'), function (x) { x.setAttribute('aria-selected', x.getAttribute('data-tab') === t ? 'true' : 'false'); });
+  }
+  function tabFromHash() { return location.hash === '#md' ? 'md' : 'page'; }
+  document.getElementById('tabs').addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-tab]'); if (!b) return;
+    var t = b.getAttribute('data-tab');
+    try {
+      if (t === 'md') location.hash = 'md';
+      else if (location.hash) { try { history.replaceState(null, '', location.pathname + location.search); } catch (e2) { location.hash = ''; } }
+    } catch (e1) { /* address cannot change → switch the view only */ }
+    showTab(t);
+  });
+  window.addEventListener('hashchange', function () { showTab(tabFromHash()); });
+  document.getElementById('mdChecks').addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-act]'); if (!b) return;
+    var row = b.closest('.mdc-row'); if (!row) return;
+    writeCheck(row.getAttribute('data-id'), { status: b.getAttribute('data-act') || '' });
+    renderChips(); renderList(); renderTree(); renderMdChecks();
+  });
+  function copyMd() {
+    var st = document.getElementById('mdCopyState'), text = String(D.md || '');
+    function fallback() {
+      var ta = document.createElement('textarea'), ok = false;
+      ta.value = text; ta.setAttribute('readonly', ''); ta.style.position = 'fixed'; ta.style.top = '-1000px';
+      document.body.appendChild(ta); ta.select();
+      try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+      document.body.removeChild(ta);
+      st.textContent = ok ? tx('copied') : tx('copyFail');
+    }
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(text).then(function () { st.textContent = tx('copied'); }, fallback); return; }
+    } catch (e) { /* fallback */ }
+    fallback();
+  }
+  document.getElementById('mdCopy').addEventListener('click', copyMd);
+  // "Paste Codex results" → db inbox/<ts>. Without db: a separate local key (LKEY + ':inbox'), never mixed with checks / notes
+  function saveInboxLocal(k, rec) { try { var o = JSON.parse(localStorage.getItem(LKEY + ':inbox') || '{}') || {}; o[k] = rec; localStorage.setItem(LKEY + ':inbox', JSON.stringify(o)); } catch (e) { /* storage unavailable */ } }
+  function saveInbox() {
+    var ta = document.getElementById('inbox'), st = document.getElementById('inboxState');
+    var text = String(ta.value || '').trim();
+    if (!text) { st.textContent = tx('inboxEmpty'); return; }
+    var k = String(Date.now()), rec = { text: text.slice(0, 20000), at: new Date().toISOString(), by: BY };
+    ta.value = '';
+    if (DB) {
+      DB.collection('inbox').doc(k).set(rec).then(function () { st.textContent = tx('inboxSaved'); },
+        function (err) { saveInboxLocal(k, rec); st.textContent = tx('inboxFail', code(err)); });
+    } else { saveInboxLocal(k, rec); st.textContent = tx('inboxLocal'); }
+  }
+  document.getElementById('inboxSave').addEventListener('click', saveInbox);
+
   renderStatic();
   renderAll();
+  showTab(tabFromHash());
 
   // Shared storage (db): only window.claude.use exists, it resolves asynchronously (may resolve to null)
   (function boot() {

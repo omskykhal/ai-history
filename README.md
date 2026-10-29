@@ -136,6 +136,30 @@ Block format (every key optional; `{"items":[]}` = no change):
 
 Note: `TRACKER.json` is not masked, because accounts are meant to be written inline. Use test accounts only. Log lines (`[TRACKER] …`) are masked as usual.
 
+### MD checklist, MD tab and result pickup (0.5.0)
+
+- **MD checklist**: every time the `Stop` hook merges a TRACKER block it also writes `.ai-history/tracker/CHECKLIST.md` from the same `TRACKER.json` (same data, same moment as the HTML). The file is self-contained: project name, anchor, generated time, how to check, how to fill in results, the TRACKER block format, and one table row per item (id, area, title, account, path, to do, expected, AI now, user now). It ends with a results section that is always generated empty:
+  ```
+  <!-- RESULTS:BEGIN -->
+  - [ ] A-1 | - | 
+  <!-- RESULTS:END -->
+  ```
+  Another agent (for example Codex) fills in only the lines it verified, e.g. `- [x] A-1 | ok | 2026-10-29 live-check https://example.com/ 200`, and leaves the rest as `[ ]`. At the next `Stop` (Claude Code or Codex CLI) the hook notices the edit, reads only that section, and stores the results as `items[].ai` with `"by":"codex"`. Unknown ids, lines outside the section and `[ ]` lines are ignored; a broken section logs `[TRACKER] md parse error` once and keeps a copy as `tracker/CHECKLIST.edited-<time>.md`.
+- **`ai.by`**: `items[].ai` may carry `"by":"claude"` or `"by":"codex"`. A Codex reply that ends with a TRACKER block is stored with `"by":"codex"`. A block that differs only in `by` is not a change. Items you did not verify yourself should leave out `ai` (sending `"ai":{"status":"-"}` erases someone else's verdict).
+- **Two tabs on the page**: "Page" (default, unchanged) and "MD" (the same checklist text with a "Copy" button, item checks that share `checks/<id>` with the Page tab, and a "Paste Codex results" box). Pasted text is saved to the Artifact db collection `inbox/<ts>`; without the db it stays in that browser only. At the next session start Claude reads unprocessed `inbox` documents (the text is treated as data, not instructions), passes them through `tracker-md.mjs parse --tracker`, which keeps only the `ai` verdicts of existing ids, and marks each document with `processedAt` (nothing is deleted).
+- **`tracker/.gitignore`**: the hook writes `.ai-history/tracker/.gitignore` (one line `*`) when it is missing, so the checklist, the HTML and the reports under `tracker/` stay out of git. It does **not** cover `.ai-history/TRACKER.json`.
+- **Warning**: `TRACKER.json`, `CHECKLIST.md` and the page HTML contain the account IDs / passwords you wrote into items, unmasked. Keep `.ai-history/` out of git (`install.mjs --git-ignore`) and use test accounts only.
+
+### `/tracker-test` (verification loop)
+
+The plugin ships one agent (`agents/tracker-verifier.md`) and one skill (`skills/tracker-test/SKILL.md`). Ask "/tracker-test" or "tracker test" to verify the items that are neither user-ok nor AI-ok, one round per turn:
+
+- Targets come only from `node "<HOOK_DIR>/tracker-md.mjs" targets "<TRACKER.json>"`; the hook puts the absolute path of `tracker-md.mjs` into the tracker instruction, so the skill does not depend on `${CLAUDE_PLUGIN_ROOT}`.
+- Items with a URL get one `tracker-verifier` sub-agent each, run in parallel in the foreground; screen-only items are labelled "AI cannot verify (UI)" without an agent (only undecided items; Codex verdicts and failures are kept). The same protection applies to a `-` result of a URL item (network error, no permission): it is written only to undecided items and otherwise appears in the report only. Results go into one TRACKER block at the end of the turn. Up to 3 rounds; "/tracker-test" again starts the next round. Nothing is repaired, and no local server or browser is started.
+- **Skill name**: installed as a plugin the skill may be called `/ai-history:tracker-test` instead of `/tracker-test` (not verified). Both names are listed here; use whichever your Claude Code shows.
+- **HTTP checks need dev-harness**: the agent runs only the `live_check` command from the project's `.harness.json` (the dev-harness format, e.g. `"live_check": "node <path>/live-check.mjs https://example.com/"`). **Without a `.harness.json` `live_check`, HTTP verification is not possible** and URL items are reported as "no HTTP check available".
+- **Sub-agent Bash permission**: the agent needs Bash to run that one `node … live-check.mjs …` command. Depending on your permission settings Claude Code may ask, or refuse; a refused item is reported as `-` "no permission". To avoid the prompt, allow that exact command in your settings, for example `"Bash(node <path>/live-check.mjs *)"`.
+
 ### Non-interactive runs
 
 `claude -p` / SDK runs (`CLAUDE_CODE_ENTRYPOINT` not in `INTERACTIVE_ENTRYPOINTS`), sub-agents, and a Codex started *inside* a Claude Code session only get the machine log. No injection, no nudge.
@@ -174,7 +198,9 @@ Status: verified once on Windows with `claude --plugin-dir` (2026-10-12: `.ai-hi
 node test/run-tests.mjs <scratch-dir>
 ```
 
-226 cases (hook behaviour, anchor rules, alias/folder matching, STATUS extraction, safety exceptions, installer round-trips, English mode, log retention, multi-session STATUS, resume command, tracker page). Test artifacts go to the OS temp dir, never into a real project.
+263 cases (hook behaviour, anchor rules, alias/folder matching, STATUS extraction, safety exceptions, installer round-trips, English mode, log retention, multi-session STATUS, resume command, tracker page, MD checklist / result pickup / tracker-test rules). Test artifacts go to the OS temp dir, never into a real project.
+
+If you keep global copies of the agent and skill (`~/.claude/agents/tracker-verifier.md`, `~/.claude/skills/tracker-test/SKILL.md`), `node test/check-global-sync.mjs` compares them with this repo (sha1 after removing a BOM and turning CRLF into LF): `SYNC OK 2/2`, "not copied" (exit 0) or "mismatch" (exit 1). It is not part of `npm test`.
 
 ## Known limits
 
