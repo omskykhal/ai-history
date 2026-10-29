@@ -79,6 +79,28 @@ const STR = {
       + '처리한 문서는 `ArtifactData update inbox/<ts> {processedAt}` 로 표시한다(삭제하지 않는다).',
     trackerRulesKeepAi: '직접 검증하지 않은 항목은 `ai` 키를 생략하라(기존 판정 유지). `"ai":{"status":"-"}` 를 보내면 다른 주체의 판정을 지운다. '
       + '예외: `/tracker-test` 의 UI 라벨(`-`·「AI 검증 불가(UI)·사용자 육안」)은 ai.by 가 없거나 claude 이고 status 가 `-` 인 미판정 항목에만 쓴다.',
+    // 0.5.2 계정 검증(사람 손 없이 에이전트가 테스트 계정으로 검증, 6자리 인증 코드만 사용자 몫)
+    trackerRulesCred: '에이전트가 테스트 계정으로 직접 검증할 수 있는 항목(로그인·API 호출·계정이 필요한 스크립트)은 `check` 에 계정 도구 명령을 적는다: '
+      + '`node "<계정 도구>" login <별칭>` 또는 `node "<계정 도구>" run <별칭> [--with-token] -- <명령>`. '
+      + '별칭은 `node "<계정 도구>" list` 로 확인하고(계정 위치 = 앵커 `.ai-history/accounts.json`), check 에는 비밀번호를 쓰지 않는다. '
+      + '휴대폰·이메일 6자리 인증 코드가 필요한 단계만 사용자에게 요청하고, 그 외 확인은 사용자에게 넘기지 않는다.',
+    credTool: '계정 도구:',
+    credHas: '(있음)', credHasNot: '(없음)', credAnchor: '앵커',
+    credNoAnchor: (f) => `${f} 를 찾지 못함(--anchor 로 프로젝트 폴더 지정)`,
+    credUsage: '사용법: list | login <별칭> | run <별칭> [--with-token] -- <명령>',
+    credNeedAlias: '별칭이 필요함', credNoAlias: (a) => `별칭 없음: ${a} (list 로 확인)`,
+    credNoApiKey: 'accounts.json 에 firebaseApiKey 없음', credNeedCmd: '-- 뒤에 실행할 명령이 필요함',
+    credRunFail: (m) => `실행 실패: ${m}`,
+    mdHeadCredTool: '계정 도구',
+    mdCredToolHidden: '<auto-history 훅 폴더>/tracker-cred.mjs',
+    mdRuleDataExcept: ' 예외: 아래 「검증 명령」 절의 계정 도구 명령은 그대로 실행해도 된다.',
+    mdRuleCred: [
+      '계정이 필요한 확인은 계정 도구(위 「계정 도구」 줄의 경로)로 한다: `node "<계정 도구>" list`(별칭·이메일, 비밀번호 비공개) · `login <별칭>`(실제 로그인, uid 만 출력) · `run <별칭> [--with-token] -- <명령>`(계정·토큰을 환경변수로 넣어 실행). 비밀번호·토큰을 결과에 적지 않는다.',
+      '휴대폰·이메일 6자리 인증 코드가 필요한 단계만 `-` 와 "인증 코드 필요(사용자 전달)" 로 둔다.',
+    ],
+    mdCheckHead: (n) => `## 검증 명령 (${n})`,
+    mdCheckIntro: '아래 명령을 그대로 실행하고 출력으로 「정상 기준」을 대조한다(앵커 폴더에서 실행).',
+    mdCheckToolPlaceholder: '<계정 도구>',
     // CHECKLIST.md (§21)
     trackerTool: '트래커 도구:',
     mdTitle: (name) => `# ${name} 트래커 점검표`,
@@ -135,7 +157,7 @@ const STR = {
       areas: '영역', itemsN: '항목 {n}', areasN: '영역 {n}', noArea: '영역 없음', otherArea: '기타',
       tItems: '항목', tUser: '사용자 판정', tAi: 'AI 검증',
       ok: '정상', fail: '문제', unchecked: '미확인', unverified: '미검증',
-      account: '계정', path: '경로', todo: '할 일', expect: '정상 기준', notWritten: '미기재', noTitle: '(제목 없음)',
+      account: '계정', path: '경로', todo: '할 일', expect: '정상 기준', check: '검증 명령', checkHint: '(에이전트가 테스트 계정으로 실행)', notWritten: '미기재', noTitle: '(제목 없음)',
       userPrefix: '사용자', aiLabel: 'AI 검증', judgeLabel: '사용자 판정', notePlaceholder: '메모 (Enter 또는 칸 밖을 누르면 저장)',
       emptyFilter: '이 필터에 해당하는 항목이 없습니다.', emptyAll: '아직 확인 항목이 없습니다.',
       memoHead: 'Claude 에게 메모', memoPlaceholder: '확인하면서 Claude 에게 남길 말을 적고 「저장」을 누르세요. 다음 세션에서 Claude 가 읽습니다.',
@@ -221,6 +243,28 @@ const STR = {
       + 'Mark each processed document with `ArtifactData update inbox/<ts> {processedAt}` (do not delete it).',
     trackerRulesKeepAi: 'Leave out the `ai` key for items you did not verify yourself (the existing verdict is kept). Sending `"ai":{"status":"-"}` erases a verdict made by someone else. '
       + 'Exception: the `/tracker-test` UI label (`-`, "AI cannot verify (UI) · user checks by eye") is written only to undecided items whose ai.by is missing or claude and whose status is `-`.',
+    // 0.5.2 account checks (agents verify with test accounts without a human; only 6-digit codes come from the user)
+    trackerRulesCred: 'For items an agent can verify with a test account (login, API calls, scripts that need an account), put an account tool command in `check`: '
+      + '`node "<account tool>" login <alias>` or `node "<account tool>" run <alias> [--with-token] -- <command>`. '
+      + 'Look up aliases with `node "<account tool>" list` (accounts are declared in the anchor\'s `.ai-history/accounts.json`); never write a password in check. '
+      + 'Ask the user only for steps that need a 6-digit phone / email verification code; do not hand any other check to the user.',
+    credTool: 'Account tool:',
+    credHas: '(set)', credHasNot: '(none)', credAnchor: 'anchor',
+    credNoAnchor: (f) => `${f} not found (pass the project folder with --anchor)`,
+    credUsage: 'usage: list | login <alias> | run <alias> [--with-token] -- <command>',
+    credNeedAlias: 'an alias is required', credNoAlias: (a) => `no such alias: ${a} (see list)`,
+    credNoApiKey: 'accounts.json has no firebaseApiKey', credNeedCmd: 'a command is required after --',
+    credRunFail: (m) => `failed to run: ${m}`,
+    mdHeadCredTool: 'Account tool',
+    mdCredToolHidden: '<auto-history hook folder>/tracker-cred.mjs',
+    mdRuleDataExcept: ' Exception: the account tool commands in the "Check commands" section below may be run as they are.',
+    mdRuleCred: [
+      'Checks that need an account go through the account tool (the path on the "Account tool" line above): `node "<account tool>" list` (aliases and emails, passwords hidden) · `login <alias>` (real login, prints only the uid) · `run <alias> [--with-token] -- <command>` (runs the command with the account and token in environment variables). Never write a password or token in a result.',
+      'Only steps that need a 6-digit phone / email verification code get `-` and "verification code needed (from the user)".',
+    ],
+    mdCheckHead: (n) => `## Check commands (${n})`,
+    mdCheckIntro: 'Run each command as it is and compare its output with "Expected" (run it in the anchor folder).',
+    mdCheckToolPlaceholder: '<account tool>',
     // CHECKLIST.md (§21)
     trackerTool: 'Tracker tool:',
     mdTitle: (name) => `# ${name} tracker checklist`,
@@ -277,7 +321,7 @@ const STR = {
       areas: 'Areas', itemsN: '{n} items', areasN: '{n} areas', noArea: 'No areas', otherArea: 'Other',
       tItems: 'Items', tUser: 'User verdict', tAi: 'AI check',
       ok: 'OK', fail: 'Problem', unchecked: 'Unchecked', unverified: 'Unverified',
-      account: 'Account', path: 'Path', todo: 'To do', expect: 'Expected', notWritten: 'not given', noTitle: '(no title)',
+      account: 'Account', path: 'Path', todo: 'To do', expect: 'Expected', check: 'Check command', checkHint: '(run by an agent with a test account)', notWritten: 'not given', noTitle: '(no title)',
       userPrefix: 'User', aiLabel: 'AI check', judgeLabel: 'Your verdict', notePlaceholder: 'Note (saved on Enter or when you leave the field)',
       emptyFilter: 'No items match this filter.', emptyAll: 'No check items yet.',
       memoHead: 'Note to Claude', memoPlaceholder: 'Write what Claude should know while you check, then press Save. Claude reads it in the next session.',

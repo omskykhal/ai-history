@@ -15,6 +15,9 @@ export const RESULTS_END = '<!-- RESULTS:END -->';
 export const RESULT_LINE_RE = /^\s*-\s\[(x|X)\]\s+([A-Za-z0-9][A-Za-z0-9_.-]{0,15})\s*\|\s*(ok|fail|-)\s*\|(.*)$/i;
 export const RESULT_LINE_MAX = 2000; // longer [x] lines are not matched and count as ignored
 const CHECKED_RE = /^\s*-\s\[[xX]\]/;
+// Item check contract: node "<…>tracker-cred.mjs" login|run|list … (any other command is not classified as cmd)
+export const CHECK_CMD_RE = /^node\s+"?[^"\r\n]*tracker-cred\.mjs"?\s+(login|run|list)(\s|$)/;
+export const CRED_TOOL = fileURLToPath(new URL('./tracker-cred.mjs', import.meta.url));
 const AI_STATUS = ['ok', 'fail', '-'];
 
 const str = (v) => (typeof v === 'string' ? v.slice(0, TRACKER_STR_MAX) : '');
@@ -48,16 +51,23 @@ export function buildChecklistMd(json, opts = {}) {
   const name = opts.name || trackerProjectName(j, opts.anchor, env);
   const label = typeof opts.anchorLabel === 'string' ? opts.anchorLabel : String(opts.anchor || '');
   const items = orderedItems(j);
+  // The page-tab copy (anchor shown as a folder name) carries no absolute paths → the account tool is shown by name only
+  const absOk = path.isAbsolute(label);
+  const credShown = absOk ? CRED_TOOL : L.mdCredToolHidden;
+  const showCheck = (c) => (absOk ? c : c.replace(/"[^"\r\n]*tracker-cred\.mjs"/g, `"${L.mdCheckToolPlaceholder}"`));
+  const means = L.mdRuleMeans.map((s, i) => (i === L.mdRuleMeans.length - 1 ? s + L.mdRuleDataExcept : s));
   const out = [
     L.mdTitle(name),
     '',
     `- ${L.mdHeadProject}: ${cell(j.project || name)}`,
     `- ${L.mdHeadAnchor}: ${label || '-'}`,
+    `- ${L.mdHeadCredTool}: ${credShown}`,
     `- ${L.mdHeadGenerated}: ${j.updatedAt || '-'}`,
     `- ${L.mdHeadSource}`,
     '',
     L.mdRuleHead,
-    ...L.mdRuleMeans.map((s) => `- ${s}`),
+    ...means.map((s) => `- ${s}`),
+    ...L.mdRuleCred.map((s) => `- ${s}`),
     '',
     L.mdHowToHead,
     ...L.mdHowToFill.map((s) => `- ${s}`),
@@ -84,6 +94,11 @@ export function buildChecklistMd(json, opts = {}) {
       const uTxt = `${L.mdUst[ust]}${u.note ? ` ${u.note}` : ''}`;
       out.push(`| ${it.id} | ${cell(areaTitle(j, it.area, L.mdOtherArea))} | ${cell(it.title)} | ${cell(it.account)} | ${cell(it.path)} | ${cell(it.todo)} | ${cell(it.expect)} | ${cell(aiTxt)} | ${cell(uTxt)} | ${L.mdResultCell} |`);
     }
+  }
+  const cmds = items.filter((it) => CHECK_CMD_RE.test(str(it.check).trim()));
+  if (cmds.length) {
+    out.push('', L.mdCheckHead(cmds.length), `- ${L.mdCheckIntro}`);
+    for (const it of cmds) out.push(`- ${it.id}: \`${showCheck(str(it.check).trim()).replace(/`/g, "'")}\``);
   }
   out.push('', L.mdResultsHead, RESULTS_BEGIN);
   for (const it of items) out.push(`- [ ] ${it.id} | - | `);
@@ -171,9 +186,12 @@ export function trackerTargets(json, opts = {}) {
         if (url.length > 10 && !urls.includes(url)) urls.push(url);
       }
     }
-    const kind = urls.length ? 'http' : 'ui';
+    // A check that is an account tool command makes the item cmd (an agent runs it with a test account) — takes precedence over http / ui
+    const check = str(it.check).trim();
+    const kind = CHECK_CMD_RE.test(check) ? 'cmd' : (urls.length ? 'http' : 'ui');
     const aSt = AI_STATUS.includes(a.status) ? a.status : '-';
     const row = { id: it.id, kind, urls, uiLabelEligible: !pm && kind === 'ui' && (!a.by || a.by === 'claude') && aSt === '-' };
+    if (kind === 'cmd') row.check = check;
     if (pm) row.pendingMd = true;
     out.push(row);
   }

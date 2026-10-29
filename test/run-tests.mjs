@@ -2098,7 +2098,8 @@ async function row13() {
     const D = dataOf(B.buildTrackerHtml(J0, { anchor: aD }));
     const mh = B.writeTrackerMd(aD, J0, KO);
     const fileMd = readT(mdFile(aD)) || '';
-    const strip = (s) => String(s).split('\n').filter((l) => !l.startsWith('- 앵커: ')).join('\n');
+    // 0.5.2: the account tool line is a location line like the anchor (file = absolute path, tab = name), so it is left out of the comparison
+    const strip = (s) => String(s).split('\n').filter((l) => !l.startsWith('- 앵커: ') && !l.startsWith('- 계정 도구: ')).join('\n');
     rec(13, '(d) D.md = 파일 md(앵커 줄 제외)', '앵커 줄 외 동일·탭 앵커=폴더 이름·절대경로 없음·writeTrackerMd 12자=파일 sha',
       `md=${!!(D && D.md)} same=${!!D && strip(D.md) === strip(fileMd)} label=${!!D && D.md.includes('- 앵커: t21d\n')} abs=${!!D && D.md.toLowerCase().includes(aD.toLowerCase())} hash=${mh}/${sha(fileMd)}`,
       !!D && typeof D.md === 'string' && strip(D.md) === strip(fileMd) && D.md !== fileMd && D.md.includes('- 앵커: t21d\n') && !D.md.toLowerCase().includes(aD.toLowerCase())
@@ -2512,6 +2513,39 @@ async function row13() {
     const { code, t } = tgOf(a);
     rec(13, '(ad) 미병합 md ok → 대상 제외', 'A-1 없음·A-2 만', `code=${code} tg=${JSON.stringify(t)}`,
       code === 0 && t.length === 1 && t[0].id === 'A-2' && !('pendingMd' in t[0]));
+  }
+
+  // ===== 0.5.2: account checks (check field · kind cmd · tracker-cred.mjs) =====
+  {
+    const CRED = path.join(HOOK, 'tracker-cred.mjs');
+    const chk = `node "${CRED}" login acc1`;
+    // (ca) check 는 병합에 남고, 계정 도구 명령이면 kind=cmd, 그 외 명령은 cmd 아님
+    const m0 = C.mergeTracker(null, { items: [{ id: 'C-1', title: '로그인', check: chk }, { id: 'C-2', title: '다른 명령', check: 'rm -rf /' }] }, { by: 'claude-t' });
+    const tg = M.trackerTargets(m0.json);
+    const g = (id) => tg.find((x) => x.id === id) || {};
+    rec(14, '(ca) check 병합·kind cmd', 'C-1 check 보존·kind cmd·check 동봉 / C-2 kind ui·check 없음',
+      `c1=${JSON.stringify(g('C-1'))} c2=${JSON.stringify(g('C-2'))}`,
+      (m0.json.items[0].check === chk) && g('C-1').kind === 'cmd' && g('C-1').check === chk && g('C-2').kind === 'ui' && !('check' in g('C-2')));
+    // (cb) MD 점검표에 계정 도구 규칙 줄과 「검증 명령」 절
+    const md = M.buildChecklistMd(m0.json, { anchor: 'C:\\x' });
+    rec(14, '(cb) MD 계정 도구 규칙·검증 명령 절', '규칙 줄에 tracker-cred.mjs·「## 검증 명령 (1)」·C-1 명령 1줄·C-2 없음',
+      `has=${md.includes('tracker-cred.mjs')} sec=${md.includes('## 검증 명령 (1)')}`,
+      md.includes('tracker-cred.mjs') && md.includes('## 검증 명령 (1)') && md.includes(`- C-1: \`${chk}\``) && !md.includes('- C-2:'));
+    // (cc) list 는 비밀번호를 내지 않고, run 은 자식 출력의 비밀번호를 *** 로 가림
+    const a = fs.mkdtempSync(path.join(os.tmpdir(), 'ah-cred-'));
+    fs.mkdirSync(path.join(a, '.ai-history'));
+    fs.writeFileSync(path.join(a, '.ai-history', 'accounts.json'), JSON.stringify({ accounts: { acc1: { email: 'u1@example.com', password: 'Sekret-9876', tier: 'pro' } } }));
+    const l = spawnSync(process.execPath, [CRED, 'list', '--anchor', a], { encoding: 'utf-8' });
+    const r = spawnSync(process.execPath, [CRED, 'run', 'acc1', '--anchor', a, '--', process.execPath, '-e', 'console.log("E=" + process.env.TEST_EMAIL + " P=" + process.env.TEST_PASSWORD)'], { encoding: 'utf-8' });
+    rec(14, '(cc) list 비공개·run 주입+가림', 'list 에 u1@example.com·(있음)·비밀번호 없음 / run 출력 E=u1@example.com P=***',
+      `list=${JSON.stringify(l.stdout.trim())} run=${JSON.stringify(r.stdout.trim())} code=${r.status}`,
+      l.status === 0 && l.stdout.includes('u1@example.com') && l.stdout.includes('(있음)') && !l.stdout.includes('Sekret-9876')
+        && r.status === 0 && r.stdout.includes('E=u1@example.com P=***') && !r.stdout.includes('Sekret-9876'));
+    // (cd) 별칭 없음·명령 없음은 종료 코드 2
+    const n1 = spawnSync(process.execPath, [CRED, 'run', 'nope', '--anchor', a, '--', 'x'], { encoding: 'utf-8' });
+    const n2 = spawnSync(process.execPath, [CRED, 'run', 'acc1', '--anchor', a], { encoding: 'utf-8' });
+    rec(14, '(cd) 잘못된 호출 = 2', '별칭 없음 2·명령 없음 2', `n1=${n1.status} n2=${n2.status}`, n1.status === 2 && n2.status === 2);
+    fs.rmSync(a, { recursive: true, force: true });
   }
 }
 

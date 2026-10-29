@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.5.2 — 2026-10-30
+
+Account checks: agents (Claude, Codex) verify tracker items with real test accounts, so only 6-digit phone / email verification codes need the user. `TRACKER.json` stays version 1 (one optional item field). No new hook events; the installer and `hooks/hooks.json` are unchanged.
+
+- New `tracker-cred.mjs` (an on-demand CLI, not a hook): `list` prints aliases and emails with secret-looking fields shown only as present / absent; `login <alias>` signs in through the Firebase Auth REST API and prints only the uid; `run <alias> [--with-token] -- <command>` runs a command with the account (and optionally an ID token) in environment variables and masks the password / token as `***` in its output. Accounts are declared per project in `<anchor>/.ai-history/accounts.json` (a path to the project's own git-ignored account file, or inline `accounts`, plus `firebaseApiKey` for login). It reads only that declaration and the file it names.
+- `items[].check` (optional): an account tool command (`node "<…>tracker-cred.mjs" login|run|list …`). `tracker-md.mjs targets` reports such items as `kind: "cmd"` with the `check` string; any other command is not classified as cmd.
+- Checklist: an "Account tool" line under the anchor (absolute path in the file, a placeholder name in the page tab), two rules on using the account tool and on 6-digit codes, and a "Check commands" section listing each item's check (tool path hidden in the page tab).
+- Tracker instruction: account rule sentence, and a final `Account tool: node "<abs path>/tracker-cred.mjs"` line (Korean: `계정 도구:`).
+- Tracker page: "Check command" row on cards that have one.
+- `agents/tracker-verifier.md` / `skills/tracker-test/SKILL.md`: cmd items are run with the item's check string exactly as given (no `.harness.json` `live_check` needed); the verifier never reads account files directly.
+- New i18n keys (ko / en) for the rules, checklist lines, page labels and the account tool's messages.
+- Tests: 270 cases (+4, row 14 (ca)–(cd)); row 13 (d) leaves the "Account tool" line out of the file / tab comparison like the anchor line.
+
 ## 0.5.1 — 2026-10-29
 
 - `tracker-md.mjs targets` now honors results in `tracker/CHECKLIST.md` that `Stop` has not merged yet (file hash differs from `mdHash` / `mdSeenHash`): those items get `pendingMd: true` and `uiLabelEligible: false`, and an unmerged `ok` removes the item from the targets. A broken results section is ignored with one stderr line. This stops `/tracker-test` from putting a UI label over a pending Codex verdict in the same turn.
