@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.1 — 2026-10-29
+
+- `tracker-md.mjs targets` now honors results in `tracker/CHECKLIST.md` that `Stop` has not merged yet (file hash differs from `mdHash` / `mdSeenHash`): those items get `pendingMd: true` and `uiLabelEligible: false`, and an unmerged `ok` removes the item from the targets. A broken results section is ignored with one stderr line. This stops `/tracker-test` from putting a UI label over a pending Codex verdict in the same turn.
+- `skills/tracker-test/SKILL.md`: items with `pendingMd: true` never get a `-` result in the block (same rule as the verdict protection).
+- Tests: 266 cases (+3, row 13 (ab)–(ad)).
+
 ## 0.5.0 — 2026-10-29
 
 MD checklist, a second page tab, result pickup from Codex, and the `/tracker-test` verification loop. `TRACKER.json` stays version 1 (only optional fields added). No new hook events; the installer and `hooks/hooks.json` are unchanged.

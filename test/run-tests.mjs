@@ -2485,6 +2485,34 @@ async function row13() {
     rec(13, '(sk) 스킬·에이전트 정의', 'SKILL.md frontmatter name/description·필수 문자열 / agent frontmatter name·description·tools·model', `skMiss=${JSON.stringify(m1)} agMiss=${JSON.stringify(m2)}`,
       m1.length === 0 && m2.length === 0);
   }
+
+  // ===== 0.5.1: targets honors unmerged CHECKLIST.md results =====
+  const tgOf = (a) => { const r = mdCli(['targets', trFile(a)]); let t = null; try { t = JSON.parse(r.stdout); } catch { /* */ } return { code: r.status, t: t || [] }; };
+  // (ab) unmerged "[x] A-1 | - | note" → A-1 pendingMd:true·uiLabelEligible:false, A-2 has no pendingMd
+  {
+    const { a } = mkProj('t13ab');
+    fill(a, [[R1, '- [x] A-1 | - | codex: needs a screen check']]);
+    const { code, t } = tgOf(a);
+    const t1 = t.find((x) => x.id === 'A-1') || {}; const t2 = t.find((x) => x.id === 'A-2') || {};
+    rec(13, '(ab) 미병합 md 결과 → pendingMd', 'A-1 pendingMd true·uiLabelEligible false / A-2 pendingMd 없음', `code=${code} tg=${JSON.stringify(t)}`,
+      code === 0 && t1.pendingMd === true && t1.uiLabelEligible === false && t1.kind === 'ui' && !!t2.id && !('pendingMd' in t2));
+  }
+  // (ac) md hash = mdHash (as the hook wrote it) → no pendingMd, A-1 uiLabelEligible true
+  {
+    const { a } = mkProj('t13ac');
+    const { code, t } = tgOf(a);
+    const t1 = t.find((x) => x.id === 'A-1') || {};
+    rec(13, '(ac) md 해시=mdHash → pendingMd 없음', 'pendingMd 키 0개·A-1 uiLabelEligible true', `code=${code} tg=${JSON.stringify(t)}`,
+      code === 0 && t.length === 2 && t.every((x) => !('pendingMd' in x)) && t1.uiLabelEligible === true);
+  }
+  // (ad) an unmerged "ok" result drops the id from targets
+  {
+    const { a } = mkProj('t13ad');
+    fill(a, [[R1, '- [x] A-1 | ok | codex checked']]);
+    const { code, t } = tgOf(a);
+    rec(13, '(ad) 미병합 md ok → 대상 제외', 'A-1 없음·A-2 만', `code=${code} tg=${JSON.stringify(t)}`,
+      code === 0 && t.length === 1 && t[0].id === 'A-2' && !('pendingMd' in t[0]));
+  }
 }
 
 main().catch((e) => { console.error(e); process.exitCode = 1; });

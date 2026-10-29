@@ -16,10 +16,11 @@ description: 트래커 미확인·문제 항목을 검증 에이전트(tracker-v
 - 블록에 `"status":"-"` 를 넣을 수 있는 항목 = `ai.by` 가 없거나 `claude` 이고 `ai.status` 가 `-` 인 **미판정 항목에만**(targets 출력의 `uiLabelEligible` 과 같은 조건: ai.by 없음/claude ∧ ai.status `-`).
 - `ai.status` 가 `fail`(또는 `ok`)이거나 `ai.by` 가 `codex` 인 항목에 `-` 결과(UI 라벨·「네트워크 오류」·「확인 불가」·「권한 없음」·「명령 불일치」)가 나오면 **블록에서 제외하고 보고서에만 적는다**(다른 주체·기존 판정 보존).
 - `ok`·`fail` 결과는 직접 검증한 결과이므로 그대로 블록에 넣는다.
+- `pendingMd:true` 항목은 다른 주체의 판정이 병합 대기 중이므로 `-` 결과를 블록에 넣지 않는다(판정 보호 규칙과 동일).
 
 ## 절차
 1. `TRACKER.json` 확인. 없거나 mode off → 보고 후 종료.
-2. 대상 목록: `node "<HOOK_DIR>/tracker-md.mjs" targets "<TRACKER.json>"` 출력**만** 사용한다(직접 판단 금지). 대상식 = `user.status != 'ok'` 이고 `ai.status != 'ok'` 인 항목. 출력 각 항목은 `{id, kind:'http'|'ui', urls:[], uiLabelEligible}`. 이번 대상 id 집합 = 출력 id 들.
+2. 대상 목록: `node "<HOOK_DIR>/tracker-md.mjs" targets "<TRACKER.json>"` 출력**만** 사용한다(직접 판단 금지). 대상식 = `user.status != 'ok'` 이고 `ai.status != 'ok'` 인 항목. 출력 각 항목은 `{id, kind:'http'|'ui', urls:[], uiLabelEligible}`(아직 Stop 이 병합하지 않은 CHECKLIST.md 결과가 있으면 `pendingMd:true` 가 붙고 `uiLabelEligible:false`, 그 결과가 ok 면 대상에서 빠짐). 이번 대상 id 집합 = 출력 id 들. `pendingMd:true` 항목은 다른 주체의 판정이 병합 대기 중이므로 `-` 결과를 블록에 넣지 않는다(판정 보호 규칙과 동일).
 3. 직전 실행 기록 `<앵커>/.ai-history/tracker/reports/last-run.json` 을 읽는다. 형식:
    `{round, roundIds, targetsHash, noChangeCount, updatedAt, endReason, results:{<id>:{status,note}}, agents, agentsTotal}`
    - `roundIds` = 1라운드 시작 시점의 대상 id 배열(정렬). `targetsHash` = `roundIds` 를 `,` 로 이은 문자열의 sha1 앞 12자(기록용, 1라운드에서만 계산하고 이어진 라운드에서는 다시 계산하지 않는다).

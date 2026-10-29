@@ -155,6 +155,7 @@ Note: `TRACKER.json` is not masked, because accounts are meant to be written inl
 The plugin ships one agent (`agents/tracker-verifier.md`) and one skill (`skills/tracker-test/SKILL.md`). Ask "/tracker-test" or "tracker test" to verify the items that are neither user-ok nor AI-ok, one round per turn:
 
 - Targets come only from `node "<HOOK_DIR>/tracker-md.mjs" targets "<TRACKER.json>"`; the hook puts the absolute path of `tracker-md.mjs` into the tracker instruction, so the skill does not depend on `${CLAUDE_PLUGIN_ROOT}`.
+- `targets` also reads results in `tracker/CHECKLIST.md` that `Stop` has not merged yet: such items carry `pendingMd: true` and never get a `-` label, and an unmerged `ok` drops the item from the targets (0.5.1).
 - Items with a URL get one `tracker-verifier` sub-agent each, run in parallel in the foreground; screen-only items are labelled "AI cannot verify (UI)" without an agent (only undecided items; Codex verdicts and failures are kept). The same protection applies to a `-` result of a URL item (network error, no permission): it is written only to undecided items and otherwise appears in the report only. Results go into one TRACKER block at the end of the turn. Up to 3 rounds; "/tracker-test" again starts the next round. Nothing is repaired, and no local server or browser is started.
 - **Skill name**: installed as a plugin the skill may be called `/ai-history:tracker-test` instead of `/tracker-test` (not verified). Both names are listed here; use whichever your Claude Code shows.
 - **HTTP checks need dev-harness**: the agent runs only the `live_check` command from the project's `.harness.json` (the dev-harness format, e.g. `"live_check": "node <path>/live-check.mjs https://example.com/"`). **Without a `.harness.json` `live_check`, HTTP verification is not possible** and URL items are reported as "no HTTP check available".
@@ -198,7 +199,7 @@ Status: verified once on Windows with `claude --plugin-dir` (2026-10-12: `.ai-hi
 node test/run-tests.mjs <scratch-dir>
 ```
 
-263 cases (hook behaviour, anchor rules, alias/folder matching, STATUS extraction, safety exceptions, installer round-trips, English mode, log retention, multi-session STATUS, resume command, tracker page, MD checklist / result pickup / tracker-test rules). Test artifacts go to the OS temp dir, never into a real project.
+266 cases (hook behaviour, anchor rules, alias/folder matching, STATUS extraction, safety exceptions, installer round-trips, English mode, log retention, multi-session STATUS, resume command, tracker page, MD checklist / result pickup / tracker-test rules). Test artifacts go to the OS temp dir, never into a real project.
 
 If you keep global copies of the agent and skill (`~/.claude/agents/tracker-verifier.md`, `~/.claude/skills/tracker-test/SKILL.md`), `node test/check-global-sync.mjs` compares them with this repo (sha1 after removing a BOM and turning CRLF into LF): `SYNC OK 2/2`, "not copied" (exit 0) or "mismatch" (exit 1). It is not part of `npm test`.
 

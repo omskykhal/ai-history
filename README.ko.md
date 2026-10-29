@@ -155,6 +155,7 @@ API 키처럼 보이는 문자열(`AIza…`, `sk-…`, `ghp_…`, `Bearer …`, 
 플러그인에는 에이전트 1개(`agents/tracker-verifier.md`)와 스킬 1개(`skills/tracker-test/SKILL.md`)가 들어 있습니다. 「/tracker-test」·「트래커 검사해줘」 라고 하면 사용자 정상도 AI 정상도 아닌 항목을 턴당 1라운드로 검증합니다:
 
 - 대상은 `node "<HOOK_DIR>/tracker-md.mjs" targets "<TRACKER.json>"` 출력만 씁니다. 훅이 트래커 지시문에 `tracker-md.mjs` 절대경로를 넣어 주므로 스킬은 `${CLAUDE_PLUGIN_ROOT}` 에 기대지 않습니다.
+- `targets` 는 `Stop` 이 아직 병합하지 않은 `tracker/CHECKLIST.md` 결과도 읽습니다. 그런 항목에는 `pendingMd: true` 가 붙고 `-` 라벨을 받지 않으며, 병합 대기 결과가 `ok` 면 대상에서 빠집니다(0.5.1).
 - URL 이 있는 항목은 항목당 `tracker-verifier` 서브에이전트 1개를 전경 병렬로 돌리고, 화면 조작 항목은 에이전트 없이 「AI 검증 불가(UI)」 로 표시합니다(미판정 항목만, Codex 판정·기존 문제 판정은 유지). URL 항목의 `-` 결과(네트워크 오류·권한 없음)도 같은 보호 규칙으로 미판정 항목에만 기록하고, 그 외에는 보고서에만 적습니다. 결과는 턴 끝 TRACKER 블록 1개로 냅니다. 최대 3라운드이며 「/tracker-test」 를 다시 입력하면 다음 라운드입니다. 수리하지 않고 로컬 서버·브라우저도 띄우지 않습니다.
 - **스킬 이름**: 플러그인으로 설치하면 `/tracker-test` 대신 `/ai-history:tracker-test` 로 불릴 수 있습니다(미확인). 두 이름을 함께 적어 둡니다. Claude Code 에 보이는 이름을 쓰세요.
 - **HTTP 검증은 dev-harness 필요**: 에이전트는 프로젝트 `.harness.json` 의 `live_check` 명령만 실행합니다(dev-harness 형식, 예: `"live_check": "node <경로>/live-check.mjs https://example.com/"`). **dev-harness `.harness.json` 에 `live_check` 가 없으면 HTTP 검증은 할 수 없고**, URL 항목은 「HTTP 확인 수단 없음」 으로 보고됩니다.
@@ -198,7 +199,7 @@ API 키처럼 보이는 문자열(`AIza…`, `sk-…`, `ghp_…`, `Bearer …`, 
 node test/run-tests.mjs <scratch-dir>
 ```
 
-263건(훅 동작·앵커 규칙·별칭/폴더 매칭·STATUS 추출·안전 예외·설치기 왕복·영어 모드·로그 보존·다중 세션 STATUS·재개 명령·트래커 페이지·MD 점검표/결과 회수/tracker-test 규칙). 시험 산출물은 OS 임시 폴더에만 생기고 실제 프로젝트엔 쓰지 않습니다.
+266건(훅 동작·앵커 규칙·별칭/폴더 매칭·STATUS 추출·안전 예외·설치기 왕복·영어 모드·로그 보존·다중 세션 STATUS·재개 명령·트래커 페이지·MD 점검표/결과 회수/tracker-test 규칙). 시험 산출물은 OS 임시 폴더에만 생기고 실제 프로젝트엔 쓰지 않습니다.
 
 에이전트·스킬 전역 사본(`~/.claude/agents/tracker-verifier.md`, `~/.claude/skills/tracker-test/SKILL.md`)을 두는 경우 `node test/check-global-sync.mjs` 가 이 저장소와 sha1 로 비교합니다(BOM 제거·CRLF→LF 정규화 후): `SYNC OK 2/2`, 「미복사」(종료 코드 0), 「불일치」(종료 코드 1). `npm test` 에는 포함되지 않습니다.
 

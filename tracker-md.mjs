@@ -3,6 +3,7 @@
 //      node tracker-md.mjs parse <text file> --tracker <TRACKER.json>   (without --tracker: exit code 2, no output)
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { TRACKER_ID_RE, TRACKER_STR_MAX, TRACKER_ITEMS_MAX, trackerProjectName, extractTracker, lang } from './common.mjs';
 import { T } from './i18n.mjs';
@@ -140,13 +141,29 @@ export function parseInboxText(text, json) {
 
 const URL_RE = /https?:\/\/\S+/g;
 const URL_TAIL_RE = /[)\]}>」』"'`,.;:]+$/;
+// 0.5.1 unmerged checklist results: when the CHECKLIST.md hash differs from json.mdHash and json.mdSeenHash (Stop has not merged it yet),
+// parse its results section → Map(id→{status,note}). Same hash or no file → empty Map. Parse error → empty Map + error (fail-open).
+export function pendingChecklistResults(json, mdText) {
+  const map = new Map();
+  if (typeof mdText !== 'string') return { map, error: null };
+  const h = crypto.createHash('sha1').update(mdText, 'utf-8').digest('hex').slice(0, 12);
+  if (json && (h === json.mdHash || h === json.mdSeenHash)) return { map, error: null };
+  const p = parseChecklistResults(mdText, json);
+  if (p.error) return { map, error: p.error };
+  for (const it of p.block.items) map.set(it.id, { status: it.ai.status, note: it.ai.note });
+  return { map, error: null };
+}
+
 // /tracker-test targets: neither user nor ai is ok. A URL in path / todo / expect → http, else ui.
-export function trackerTargets(json) {
+// opts.pendingMd (Map id→{status}): unmerged checklist results. ok → not a target; otherwise pendingMd:true and uiLabelEligible:false (protects the pending verdict).
+export function trackerTargets(json, opts = {}) {
+  const pending = opts.pendingMd instanceof Map ? opts.pendingMd : new Map();
   const out = [];
   for (const it of itemsOf(json)) {
     const a = it.ai && typeof it.ai === 'object' ? it.ai : {};
     const u = it.user && typeof it.user === 'object' ? it.user : {};
-    if (u.status === 'ok' || a.status === 'ok') continue;
+    const pm = pending.get(it.id);
+    if (u.status === 'ok' || a.status === 'ok' || (pm && pm.status === 'ok')) continue;
     const urls = [];
     for (const k of ['path', 'todo', 'expect']) {
       for (const m of str(it[k]).match(URL_RE) || []) {
@@ -156,9 +173,21 @@ export function trackerTargets(json) {
     }
     const kind = urls.length ? 'http' : 'ui';
     const aSt = AI_STATUS.includes(a.status) ? a.status : '-';
-    out.push({ id: it.id, kind, urls, uiLabelEligible: kind === 'ui' && (!a.by || a.by === 'claude') && aSt === '-' });
+    const row = { id: it.id, kind, urls, uiLabelEligible: !pm && kind === 'ui' && (!a.by || a.by === 'claude') && aSt === '-' };
+    if (pm) row.pendingMd = true;
+    out.push(row);
   }
   return out;
+}
+
+// CLI targets: honor unmerged results in tracker/CHECKLIST.md next to TRACKER.json
+function targetsFromFile(file) {
+  const json = readJsonFile(file);
+  let text;
+  try { text = fs.readFileSync(path.join(path.dirname(file), 'tracker', 'CHECKLIST.md'), 'utf-8'); } catch { text = undefined; }
+  const pm = pendingChecklistResults(json, text);
+  if (pm.error) process.stderr.write(`[tracker-md] CHECKLIST.md results section parse error (${pm.error}); unmerged results ignored\n`);
+  return trackerTargets(json, { pendingMd: pm.map });
 }
 
 function readJsonFile(f) {
@@ -171,7 +200,7 @@ function cli(argv) {
   const [cmd, file] = argv;
   if (cmd === 'targets') {
     if (!file) return 2;
-    process.stdout.write(`${JSON.stringify(trackerTargets(readJsonFile(file)))}\n`);
+    process.stdout.write(`${JSON.stringify(targetsFromFile(file))}\n`);
     return 0;
   }
   if (cmd === 'parse') {
