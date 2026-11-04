@@ -1,15 +1,15 @@
 # ai-history
 
-**One shared, human-readable work history for Claude Code and OpenAI Codex, per project, written automatically by hooks.**
+**One shared, human-readable work history for Claude Code, OpenAI Codex, Grok, Kimi and Cursor, per project, written automatically by hooks.**
 
 [한국어 README](README.ko.md)
 
-Close the laptop mid-task, come back tomorrow, open Claude Code *or* Codex from any folder, say the project's name, and the agent starts with a `[Status]` report of what was being done, how far it got, what is next, and **which agent did it last**.
+Close the laptop mid-task, come back tomorrow, open Claude Code, Codex, Grok, Kimi or Cursor from any folder, say the project's name, and the agent starts with a `[Status]` report of what was being done, how far it got, what is next, and **which agent did it last**.
 
-- Every tool call is appended to `<project>/.ai-history/YYYY-MM-DD.md` as one line: `- HH:mm:ss [session][claude|codex] ▶ [Bash] npm test`.
+- Every tool call is appended to `<project>/.ai-history/YYYY-MM-DD.md` as one line: `- HH:mm:ss [session][claude|codex|grok|kimi|cursor] ▶ [Bash] npm test`.
 - At the end of each reply the agent writes a short status block; a hook saves it to `<project>/.ai-history/STATUS.md` (Working on / Done / Next / Progress).
 - On session start, and whenever you mention a project by name, the hook injects `STATUS.md` plus the tail of today's and yesterday's log.
-- Claude Code and Codex read and write the **same files**, so you can switch between them and keep one timeline.
+- All of these agents read and write the **same files**, so you can switch between them and keep one timeline.
 - No LLM calls, no database, no cloud. Plain Markdown in the project folder, written by small Node scripts.
 
 ## Requirements
@@ -19,6 +19,7 @@ Close the laptop mid-task, come back tomorrow, open Claude Code *or* Codex from 
 | Node.js | 18 or newer (`node --version`) |
 | Claude Code | hooks support (`SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `Stop`, `SessionEnd`) |
 | OpenAI Codex CLI | 0.160 or newer with `hooks` enabled (`codex features list` → `hooks stable true`), optional |
+| Grok, Kimi Code, Cursor | Tested with Grok 1.0.70, Kimi Code 2.3.3 and Cursor 3.20.21, optional. See [Other agents](#other-agents-grok-kimi-cursor-060) |
 | OS | **Windows** (tested). macOS/Linux: path handling is implemented but **untested** |
 
 ## Install
@@ -38,6 +39,9 @@ Get the files once: clone this repository (or download a release archive from th
 node install.mjs --install --root "C:\Users\me\Projects" --lang en
 # 2) optional: register the same hooks for Codex (first Codex start asks you to trust 5 handlers)
 node install.mjs --codex-hooks
+# optional: Kimi Code (adds 6 [[hooks]] to ~/.kimi-code/config.toml) and Grok (session start hook)
+node install.mjs --kimi-hooks
+node install.mjs --grok-hooks
 # 3) optional: keep .ai-history/ out of every git repo via git's global excludes file
 node install.mjs --git-ignore
 # check
@@ -56,6 +60,8 @@ Uninstall:
 ```bash
 node install.mjs --uninstall           # Claude Code entries only
 node install.mjs --codex-hooks-remove  # Codex entries only
+node install.mjs --kimi-hooks-remove   # Kimi entries only
+node install.mjs --grok-hooks-remove   # Grok file only
 ```
 
 Project folders keep their `.ai-history/` folders; delete them yourself if you no longer want them.
@@ -163,7 +169,7 @@ The plugin ships one agent (`agents/tracker-verifier.md`) and one skill (`skills
 
 ### Non-interactive runs
 
-`claude -p` / SDK runs (`CLAUDE_CODE_ENTRYPOINT` not in `INTERACTIVE_ENTRYPOINTS`), sub-agents, and a Codex started *inside* a Claude Code session only get the machine log. No injection, no nudge.
+`claude -p` / SDK runs (`CLAUDE_CODE_ENTRYPOINT` not in `INTERACTIVE_ENTRYPOINTS`), sub-agents, and a Codex, Grok or Kimi started *inside* a Claude Code session only get the machine log. No injection, no nudge.
 
 ## Configuration
 
@@ -187,6 +193,24 @@ All files live next to the scripts (or in `AUTO_HISTORY_CONF_DIR`). Missing file
 
 Aliases are matched on word boundaries, case-insensitively, longest phrase first; separators may be space, dot or hyphen (`tauko work` = `tauko-work` = `tauko.work`). Text inside code fences, URLs, file paths and pasted blocks is ignored, and only the first 400 characters of the prompt are scanned.
 
+## Other agents: Grok, Kimi, Cursor (0.6.0)
+
+The history files, the STATUS block, the one-time nudge, the resume command and the tracker files work the same. Each tool only lets a hook reach the model at certain points, so the timing differs:
+
+| | Grok | Kimi Code | Cursor |
+|---|---|---|---|
+| Registered by | `--install` (Grok reads `~/.claude/settings.json`) + `--grok-hooks` | `--kimi-hooks` | `--install` (Cursor reads `~/.claude/settings.json`) |
+| Earlier history and `[Status]` | after the first tool call, or after the first reply if no tool ran | with the first prompt | at session start |
+| Resume command | `grok --resume <id>` | `kimi -S session_<id>` | none |
+| Missing STATUS block | asked once in the same turn | asked once; the corrected reply is saved at the next prompt or session end | one automatic follow-up message (uses your quota) |
+
+- Grok runs your hooks only in folders you trust (`/hooks-trust`). Its sub-agent sessions have their own ids and are not logged.
+- Publishing the tracker page and reading verdicts from it stay Claude-only because they need the Artifact tool. Other agents still write `TRACKER.json`, the HTML and `CHECKLIST.md`.
+- To turn off the nudge per agent, create `NO_BLOCK_GROK`, `NO_BLOCK_KIMI` or `NO_BLOCK_CURSOR` in the conf folder.
+- `node import-cursor.mjs <project folder>` copies earlier Cursor conversations into `.ai-history/cursor-import-<id8>.md`.
+
+Status: logging, agent labels and input fields were checked with one real `grok -p` and `kimi -p` run on Windows, and Cursor logging in one real project. Whether the model acts on the injected text in a stand-alone interactive Grok or Kimi session, and Cursor's follow-up message, have not been observed yet.
+
 ## Claude Code plugin mode (experimental)
 
 The repo also carries `.claude-plugin/plugin.json` and `hooks/hooks.json`, so it can be loaded with `claude --plugin-dir ./ai-history` or installed from the marketplace (`/plugin install ai-history --marketplace omskykhal/ai-history`). In plugin mode the conf dir is `CLAUDE_PLUGIN_DATA`, so set `AUTO_HISTORY_ROOT` (and optionally `AUTO_HISTORY_LANG`) as environment variables instead of the `ROOT`/`LANG` files. Codex still needs `install.mjs --codex-hooks`.
@@ -197,9 +221,11 @@ Status: verified once on Windows with `claude --plugin-dir` (2026-10-12: `.ai-hi
 
 ```bash
 node test/run-tests.mjs <scratch-dir>
+node test/run-agent-tests.mjs
+node test/run-cursor-tests.mjs
 ```
 
-266 cases (hook behaviour, anchor rules, alias/folder matching, STATUS extraction, safety exceptions, installer round-trips, English mode, log retention, multi-session STATUS, resume command, tracker page, MD checklist / result pickup / tracker-test rules). Test artifacts go to the OS temp dir, never into a real project.
+270 + 75 + 23 cases (hook behaviour, anchor rules, alias/folder matching, STATUS extraction, safety exceptions, installer round-trips, English mode, log retention, multi-session STATUS, resume command, tracker page, MD checklist / result pickup / tracker-test rules). Test artifacts go to the OS temp dir, never into a real project.
 
 If you keep global copies of the agent and skill (`~/.claude/agents/tracker-verifier.md`, `~/.claude/skills/tracker-test/SKILL.md`), `node test/check-global-sync.mjs` compares them with this repo (sha1 after removing a BOM and turning CRLF into LF): `SYNC OK 2/2`, "not copied" (exit 0) or "mismatch" (exit 1). It is not part of `npm test`.
 
@@ -207,6 +233,7 @@ If you keep global copies of the agent and skill (`~/.claude/agents/tracker-veri
 
 - Windows is the only tested platform.
 - Two agents writing the same project at the same time interleave in the log; `STATUS.md` is last-writer-wins (each session's own block survives in `sessions/`, see above).
+- `grok -p` run outside Claude Code counts as interactive, because no signal to tell it apart was found.
 - Codex `decision: block` on `Stop` has not been observed in practice (Codex followed the instruction every time during testing).
 
 ## Author / License

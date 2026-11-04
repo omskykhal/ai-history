@@ -1,7 +1,7 @@
 {
   "name": "ai-history",
-  "version": "0.5.2",
-  "description": "One shared, human-readable work history per project for Claude Code and OpenAI Codex, written automatically by hooks.",
+  "version": "0.6.0",
+  "description": "One shared, human-readable work history per project for Claude Code, OpenAI Codex, Grok, Kimi and Cursor, written automatically by hooks.",
   "type": "module",
   "private": true,
   "author": {
@@ -19,6 +19,9 @@
     "claude-code-plugin",
     "codex",
     "codex-cli",
+    "grok",
+    "kimi",
+    "cursor",
     "hooks",
     "session-memory",
     "persistent-memory",
@@ -28,7 +31,7 @@
     "node": ">=18"
   },
   "scripts": {
-    "test": "node test/run-tests.mjs",
+    "test": "node test/run-tests.mjs && node test/run-agent-tests.mjs && node test/run-cursor-tests.mjs",
     "install-hooks": "node install.mjs --install",
     "status": "node install.mjs --status"
   }

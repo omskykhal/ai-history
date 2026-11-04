@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.6.0 — 2026-11-04
+
+Grok, Kimi Code and Cursor now get the same history, STATUS block, one-time nudge, resume command and tracker files as Claude Code and Codex. `TRACKER.json` stays version 1. Hook events for Claude Code and Codex are unchanged.
+
+- Grok: recognized from its input (it loads `~/.claude/settings.json` hooks without arguments). New `install.mjs --grok-hooks` adds the session start hook (`new|load`). Its text reaches the model after the first tool call, or through one `Stop` block when a turn used no tool. The extra `Stop` at session end is ignored, a reply clipped at 32,768 characters is read from the transcript, and resume keeps the launch folder.
+- Kimi Code: new `install.mjs --kimi-hooks` adds six `[[hooks]]` to `~/.kimi-code/config.toml` (it stops if the file defines hooks in another form). The reply is read from the session's `wire.jsonl`, since `Stop` input has no text. Kimi does not call `Stop` again after a block, so the corrected reply is handled at the next prompt or session end. Nothing is demanded when the final reply cannot be read.
+- Cursor: recognized from `cursor_version`. Text goes in at session start and after the first tool call. A missing block gets one automatic follow-up message; the `Stop` right after a follow-up never asks again, and background agents are left out. New `import-cursor.mjs` copies earlier conversations into the history folder.
+- Tool names and input keys are normalized for logs and tracker change detection (`run_terminal_command`, `StrReplace`, `target_file`, `path`, relative paths).
+- Conf file names per agent: `NO_BLOCK_GROK`, `NO_BLOCK_KIMI`, `NO_BLOCK_CURSOR` (same for `DUMP_INPUTS_`, `NESTED_MARKERS_`).
+- `items[].ai.by` also accepts `grok`, `kimi`, `cursor`.
+- Hook input with a BOM or in UTF-16 is decoded; unreadable input leaves one line (length and first char codes only) in `state/input-errors.log`.
+- `hooks/hooks.json`: the `SessionStart` matcher also accepts `new|load`.
+- Tests: `npm test` now also runs `test/run-agent-tests.mjs` (75) and `test/run-cursor-tests.mjs` (23).
+
 ## 0.5.2 — 2026-10-30
 
 Account checks: agents (Claude, Codex) verify tracker items with real test accounts, so only 6-digit phone / email verification codes need the user. `TRACKER.json` stays version 1 (one optional item field). No new hook events; the installer and `hooks/hooks.json` are unchanged.

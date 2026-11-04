@@ -5,7 +5,7 @@
 import path from 'node:path';
 import {
   runHook, readInput, hookEnv, readState, inScope, normalizeWinPath, historyDir, appendLog, maybeDump,
-  resumeCommand, upsertStatusResume, sessionStatusPath, oneLine, mask, t, AGENT,
+  resumeCommand, upsertStatusResume, sessionStatusPath, oneLine, mask, t, AGENT, kimiLateCapture,
 } from './common.mjs';
 
 runHook(async () => {
@@ -15,6 +15,7 @@ runHook(async () => {
   if (!data || !data.session_id) return;
   const state = readState(data.session_id, env);
   if (!state || !state.anchor || !inScope(state.anchor, env)) return;
+  if (AGENT === 'kimi') kimiLateCapture(data, env); // handle the last turn's corrected reply before the Resume line is added
   const anchor = normalizeWinPath(state.anchor);
   const sid8 = String(data.session_id).slice(0, 8);
   const cmd = resumeCommand(data.session_id, AGENT);

@@ -3,7 +3,9 @@
 //   node install.mjs --uninstall [--settings <path>] [--dry-run]                               remove only our entries
 //   node install.mjs --codex-hooks [--codex-file <path>] [--dry-run]                           merge our 6 hooks into ~/.codex/hooks.json (--agent codex)
 //   node install.mjs --codex-hooks-remove [--codex-file <path>] [--dry-run]                    remove only our entries
-//   node install.mjs --git-ignore [--dry-run]                                                   add ".ai-history/" to git's global excludes file
+//   node install.mjs --kimi-hooks | --kimi-hooks-remove [--kimi-file <path>] [--dry-run]         our 6 hooks in ~/.kimi-code/config.toml (--agent kimi)
+//   node install.mjs --grok-hooks | --grok-hooks-remove [--grok-file <path>] [--dry-run]         Grok session start hook (other events come from --install)
+//   node install.mjs --git-ignore [--dry-run]                                                  add ".ai-history/" to git's global excludes file
 //   node install.mjs --migrate-dirname [--root <dir>] [--dry-run]                              rename legacy .claude-history → .ai-history (depth ≤ 2)
 //   node install.mjs --config [--root <dir>] [--lang en|ko] [--keep-days N] [--archive-days N] [--sessions-days N]
 //                                                                                               write ROOT / LANG / RETENTION conf files only
@@ -293,6 +295,83 @@ function status(settingsFile, codexFile) {
   };
 }
 
+// Kimi: [[hooks]] in ~/.kimi-code/config.toml, allowed fields only (an extra field stops the whole file from loading).
+// Kimi drops comments when it rewrites the file, so our entries are found by command path instead of a marker comment.
+const KIMI_OURS_RE = new RegExp(`/ai-history/[^"]*(${SCRIPTS.map((s) => s.replace('.', '\\.')).join('|')})`, 'i');
+function isOursKimiBlock(text) {
+  const c = text.replace(/\\\\/g, '/');
+  return c.includes(`${HOOK_DIR_FWD}/`) || KIMI_OURS_RE.test(c);
+}
+function stripKimi(text) {
+  const out = [];
+  const lines = text.replace(/\r\n/g, '\n').split('\n');
+  let i = 0;
+  let removed = 0;
+  let inMultiline = null; // text inside a multi-line string is never a table header
+  const toggle = (line) => {
+    for (const q of ['"""', "'''"]) {
+      const n = line.split(q).length - 1;
+      if (inMultiline === q) { if (n % 2) inMultiline = null; return; }
+      if (!inMultiline && n % 2) { inMultiline = q; return; }
+    }
+  };
+  while (i < lines.length) {
+    if (inMultiline || !/^\s*\[\[hooks\]\]\s*$/.test(lines[i])) { toggle(lines[i]); out.push(lines[i]); i += 1; continue; }
+    let j = i + 1;
+    while (j < lines.length && /^\s*[A-Za-z0-9_"'-]+\s*=/.test(lines[j])) j += 1; // the block ends with its key lines; comments and blank lines stay
+    const block = lines.slice(i, j);
+    if (isOursKimiBlock(block.join('\n'))) removed += 1;
+    else out.push(...block);
+    i = j;
+  }
+  return { text: out.join('\n'), removed };
+}
+function writeWithBackup(file, content) {
+  const backup = `${file}.bak.ai-history.${tsNow()}`;
+  fs.copyFileSync(file, backup);
+  const tmp = `${file}.${process.pid}.tmp`;
+  fs.writeFileSync(tmp, content, 'utf-8');
+  fs.renameSync(tmp, file);
+  return backup;
+}
+function kimiHooks(file, dry) {
+  const raw = fs.existsSync(file) ? fs.readFileSync(file, 'utf-8') : '';
+  // hooks as a value or a single table: adding [[hooks]] would break the TOML → stop without touching it
+  if (/^\s*(hooks\s*=|\[hooks[\].])/m.test(raw)) throw new Error(`${file} defines hooks in a form other than [[hooks]]; clean it up by hand`);
+  if (HOOK_DIR_FWD.includes("'")) throw new Error('the install path contains an apostrophe; move the folder first');
+  const base = stripKimi(raw).text.replace(/\s+$/, '');
+  const blocks = Object.entries(OUR_HOOKS).map(([ev, d]) => `[[hooks]]\nevent = "${ev}"\ncommand = '${cmd(d.script)} --agent kimi'\ntimeout = ${d.script === 'prompt-submit.mjs' ? 5 : d.timeout}\n`);
+  const next = `${base ? `${base}\n\n` : ''}${blocks.join('\n')}`;
+  if (dry) return { mode: 'kimi-hooks', dryRun: true, file, blocks };
+  if (next === raw) return { mode: 'kimi-hooks', file, unchanged: true, oursCount: blocks.length }; // no more backups of a file that holds credentials
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  if (!fs.existsSync(file)) fs.writeFileSync(file, '', 'utf-8');
+  const backup = writeWithBackup(file, next);
+  return { mode: 'kimi-hooks', file, backup, oursCount: blocks.length };
+}
+function kimiHooksRemove(file, dry) {
+  if (!fs.existsSync(file)) return { mode: 'kimi-hooks-remove', file, removed: 0, reason: 'absent' };
+  const s = stripKimi(fs.readFileSync(file, 'utf-8'));
+  if (dry) return { mode: 'kimi-hooks-remove', dryRun: true, file, removed: s.removed };
+  if (!s.removed) return { mode: 'kimi-hooks-remove', file, removed: 0 };
+  const backup = writeWithBackup(file, `${s.text.replace(/\s+$/, '')}\n`);
+  return { mode: 'kimi-hooks-remove', file, backup, removed: s.removed };
+}
+// Grok reads ~/.claude/settings.json hooks, so the other events already run after --install. Only its session start values differ (new, load).
+function grokHooks(file, dry) {
+  const obj = { hooks: { SessionStart: [{ matcher: 'new|load', hooks: [{ type: 'command', command: cmd('session-start.mjs'), timeout: 5 }] }] } };
+  if (dry) return { mode: 'grok-hooks', dryRun: true, file, content: obj };
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, `${JSON.stringify(obj, null, 2)}\n`, 'utf-8');
+  return { mode: 'grok-hooks', file, created: true };
+}
+function grokHooksRemove(file, dry) {
+  if (!fs.existsSync(file)) return { mode: 'grok-hooks-remove', file, removed: false, reason: 'absent' };
+  if (dry) return { mode: 'grok-hooks-remove', dryRun: true, file };
+  fs.unlinkSync(file);
+  return { mode: 'grok-hooks-remove', file, removed: true };
+}
+
 function argVal(args, k) { const i = args.indexOf(k); return i >= 0 && args[i + 1] && !args[i + 1].startsWith('--') ? args[i + 1] : null; }
 
 function main() {
@@ -308,6 +387,12 @@ function main() {
     const root = path.resolve(argVal(args, '--root') || getRoot());
     return print(migrateDirname(root, dry));
   }
+  const kimiFile = path.resolve(argVal(args, '--kimi-file') || path.join(os.homedir(), '.kimi-code', 'config.toml'));
+  const grokFile = path.resolve(argVal(args, '--grok-file') || path.join(os.homedir(), '.grok', 'hooks', 'ai-history.json'));
+  if (args.includes('--kimi-hooks')) return print(kimiHooks(kimiFile, dry));
+  if (args.includes('--kimi-hooks-remove')) return print(kimiHooksRemove(kimiFile, dry));
+  if (args.includes('--grok-hooks')) return print(grokHooks(grokFile, dry));
+  if (args.includes('--grok-hooks-remove')) return print(grokHooksRemove(grokFile, dry));
   if (args.includes('--codex-hooks')) return print(codexHooks(codexFile, dry));
   if (args.includes('--codex-hooks-remove')) return print(codexHooksRemove(codexFile, dry));
   if (args.includes('--git-ignore')) return print(gitIgnore(dry));
@@ -327,6 +412,8 @@ function main() {
     '  --uninstall [--settings <path>] [--dry-run]',
     '  --codex-hooks [--codex-file <path>] [--dry-run]',
     '  --codex-hooks-remove [--codex-file <path>] [--dry-run]',
+    '  --kimi-hooks | --kimi-hooks-remove [--kimi-file <path>] [--dry-run]',
+    '  --grok-hooks | --grok-hooks-remove [--grok-file <path>] [--dry-run]',
     '  --git-ignore [--dry-run]',
     '  --migrate-dirname [--root <dir>] [--dry-run]',
     '  --config [--root <dir>] [--lang en|ko] [--keep-days N] [--archive-days N] [--sessions-days N]',

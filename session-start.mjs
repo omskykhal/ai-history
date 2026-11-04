@@ -4,7 +4,7 @@ import path from 'node:path';
 import {
   runHook, readInput, hookEnv, emit, inScope, normalizeWinPath, isInteractive, statePaths, writeState, removeFile, maybeDump, historyDir,
   resolveAnchor, readerBody, READER_TOTAL_MAX, VALID_SOURCES, AGENT, lastWorkerLine, t, appendLog, runRetention, retentionLogLine,
-  trackerDbReadInstruction,
+  trackerDbReadInstruction, statusFormatFor, hasArtifactTools, hasSessionContext, writePending,
 } from './common.mjs';
 
 const STALE_MS = 7 * 24 * 60 * 60 * 1000;
@@ -32,13 +32,15 @@ runHook(async () => {
 
   // Initial candidate: startup → cwd. clear/resume/fork → CLAUDE_PROJECT_DIR if in scope, else cwd.
   let candidate = data.cwd;
-  if (source !== 'startup' && env.CLAUDE_PROJECT_DIR && inScope(env.CLAUDE_PROJECT_DIR, env)) candidate = env.CLAUDE_PROJECT_DIR;
+  // Grok's CLAUDE_PROJECT_DIR is the repository root and can differ from the launch folder → Grok always uses cwd.
+  if (source !== 'startup' && AGENT !== 'grok' && env.CLAUDE_PROJECT_DIR && inScope(env.CLAUDE_PROJECT_DIR, env)) candidate = env.CLAUDE_PROJECT_DIR;
   const sp = statePaths(data.session_id, env);
   if (!candidate || !inScope(candidate, env)) {
     // started/resumed outside the root: drop state, inject nothing
     removeFile(sp.json);
     removeFile(sp.tool);
     removeFile(sp.tracker);
+    removeFile(sp.ctx);
     return;
   }
 
@@ -52,6 +54,7 @@ runHook(async () => {
     createdAt: (r.state && r.state.createdAt) || new Date().toISOString(),
     agent: AGENT,
     lastCwd: (r.state && r.state.lastCwd) || normalizeWinPath(candidate),
+    ...(data.is_background_agent === true ? { background: true } : {}), // Cursor sends this field on session events only
   }, env);
   cleanupStale(sp.dir);
   // log retention for this anchor (once per 24h, interactive or not)
@@ -67,9 +70,20 @@ runHook(async () => {
     ctx = L.sessionNoHistory;
   } else {
     const lw = lastWorkerLine(anchor, env);
-    const dbRead = trackerDbReadInstruction(anchor, env); // read the tracker page db once (only when it has a url)
+    const dbRead = hasArtifactTools() ? trackerDbReadInstruction(anchor, env) : ''; // read the tracker page db once (only when it has a url). Cursor, Grok and Kimi have no ArtifactData
     ctx = `${lw ? `[auto-history] ${lw}\n` : ''}${L.sessionIntro(anchor)}${L.sessionInstruction}${dbRead ? `\n${dbRead}` : ''}${readerBody(anchor, env, { sid8: String(data.session_id).slice(0, 8) })}`;
     if (ctx.length > READER_TOTAL_MAX) ctx = ctx.slice(0, READER_TOTAL_MAX);
+  }
+  if (!hasSessionContext()) {
+    // Grok and Kimi do not pass session-start output to the model → hold it for the next delivery point. A folder without history has nothing to pass on.
+    if (fs.existsSync(historyDir(anchor, env))) writePending(data.session_id, { reader: ctx }, env);
+    return;
+  }
+  if (AGENT === 'cursor') {
+    // Cursor cannot take text per prompt, so the STATUS instruction goes in here too. Its docs do not say which form it reads from Claude settings: both are sent.
+    const text = `${ctx}\n\n${L.sessionStatusReminder(statusFormatFor(env))}`;
+    emit({ additional_context: text, hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: text } });
+    return;
   }
   emit({ hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: ctx } });
 });

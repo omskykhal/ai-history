@@ -2,11 +2,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {
-  runHook, readInput, hookEnv, emit, resolveAnchor, isInteractive, statePaths, writeState, removeFile, appendLog,
+  runHook, readInput, hookEnv, resolveAnchor, isInteractive, statePaths, writeState, removeFile, appendLog,
   maybeDump, mask, oneLine, confFileExists, historyDir, writeAtomic, statusFormatFor, statusHeader, missingHeadings,
   agentConfName, t, sessionStatusPath, AGENT, ymd, hms,
   extractTracker, trackerEligibility, mergeTracker, writeTracker, emptyTracker, TRACKER_URL_RE, trackerFormatFor, trackerRulesFor, PUBLISH_INSTRUCTION,
-  trackerMdPath,
+  trackerMdPath, hasToolContext, readPending, emitStopBlock, kimiLastMessage,
 } from './common.mjs';
 import { writeTrackerHtml, writeTrackerMd, sha12 } from './tracker-build.mjs';
 import { parseChecklistResults } from './tracker-md.mjs';
@@ -44,7 +44,7 @@ function tailFromTranscript(file) {
     let o;
     try { o = JSON.parse(l); } catch { continue; }
     const m = o && (o.message || o);
-    const role = (m && m.role) || (o && o.type);
+    const role = (m && m.role) || (o && o.role) || (o && o.type); // Cursor keeps role outside message
     if (role !== 'assistant') continue;
     const c = m.content;
     let text = '';
@@ -129,6 +129,8 @@ runHook(async () => {
   if (env.AUTO_HISTORY_DISABLE === '1') return;
   const data = await readInput();
   if (!data || !data.session_id) return;
+  // Grok sends one more observe-only Stop when the session ends (not a turn end)
+  if (AGENT === 'grok' && (data.reason === 'channel_closed' || data.reason === 'shutdown')) return;
   const r = resolveAnchor(data, env);
   if (!r) return;
   const { anchor, state } = r;
@@ -137,6 +139,25 @@ runHook(async () => {
 
   let msg = typeof data.last_assistant_message === 'string' ? data.last_assistant_message : '';
   if (!msg) msg = tailFromTranscript(data.transcript_path);
+  // Grok clips the reply at 32,768 characters. A cut-off STATUS / TRACKER is read from the transcript; if that fails, nothing is demanded.
+  let clipped = AGENT === 'grok' && /… \[\+\d+ chars\]$/.test(msg);
+  if (clipped) {
+    const full = tailFromTranscript(data.transcript_path);
+    if (full) { msg = full; clipped = false; }
+  }
+  const late = data.late_capture === true; // Kimi: corrected or late-written reply, handled at the next prompt / session end
+  if (!msg && AGENT === 'kimi') {
+    // Kimi's Stop input has no reply text. The session file can lag, so retry briefly (within the 5 s hook limit).
+    for (let i = 0; i < (late ? 1 : 4) && !msg; i++) {
+      msg = kimiLastMessage(data.session_id, env, { skipUser: late }) || '';
+      if (!msg && !late && i < 3) await new Promise((res) => setTimeout(res, 200));
+    }
+    if (!msg) {
+      // No final reply: the file lags, or this is a sub-agent's Stop (the input cannot tell). No block, no marker cleanup; try again later.
+      if (state && !late) writeState(data.session_id, { ...state, kimiCaptureDue: true }, env);
+      return;
+    }
+  }
 
   const st = msg ? extractStatus(msg, env) : null;
   // TRACKER block (last BEGIN~END). The [Turn-end] summary leaves it out.
@@ -176,22 +197,33 @@ runHook(async () => {
   if (tr.found && !data.agent_id) removeFile(sp.tracker);
   const hasTrackerMarker = fs.existsSync(sp.tracker);
   // Block decision: the STATUS nudge, the TRACKER block request and the publish request share one block per turn
-  const canBlock = () => state && !data.agent_id
+  // Cursor submits a block as a user message and has no repeat limit for Claude hooks. The Stop right after a follow-up never asks again,
+  // so the chain ends whatever the input says. Background agents are left out.
+  const cursorOk = AGENT !== 'cursor' || (data.status === 'completed' && !(state && state.cursorFollowupSent)
+    && !(state && state.background) && !confFileExists('NO_BLOCK', env));
+  const canBlock = () => state && !data.agent_id && cursorOk && !clipped
     && data.stop_hook_active !== true
     && !confFileExists(agentConfName('NO_BLOCK'), env)
     && env.AUTO_HISTORY_NO_BLOCK !== '1'
     && isInteractive(data, env)
     && !isSafetyException(data);
   const needStatus = !!(!st && state && hasTool && state.blockedAt == null);
+  // Grok, Cursor: a turn without tools has no "after a tool" delivery → the earlier record is passed on here
+  const held = state && !data.agent_id && hasToolContext() ? readPending(data.session_id, env) : null;
+  const needReader = !!(held && held.reader);
   if (state && !data.agent_id) {
     const elig = trackerEligibility(anchor, env);
     const on = elig.mode === 'on' || elig.mode === 'new';
     const needTrackerBlock = on && hasTrackerMarker && !tr.found && state.trackerBlockedAt == null;
     const needPublish = elig.mode === 'on' && !!(elig.json && elig.json.pending) && AGENT === 'claude'
       && state.publishAskedAt == null && !urlSaved;
-    if ((needStatus || needTrackerBlock || needPublish) && canBlock()) {
+    if ((needStatus || needTrackerBlock || needPublish || needReader) && canBlock()) {
       const now = new Date().toISOString();
       const parts = [];
+      if (needReader) {
+        parts.push(`${held.reader}\n\n${L.readerDelivered}`);
+        removeFile(sp.ctx);
+      }
       if (needStatus) parts.push(L.blockReason(statusFormatFor(env)));
       if (needTrackerBlock) parts.push(L.trackerBlockReason(needStatus, trackerFormatFor(env), trackerRulesFor(env)));
       if (needPublish) parts.push(PUBLISH_INSTRUCTION(anchor, elig.json, env));
@@ -200,10 +232,12 @@ runHook(async () => {
         blockedAt: needStatus ? now : (state.blockedAt ?? null),
         trackerBlockedAt: needTrackerBlock ? now : (state.trackerBlockedAt ?? null),
         publishAskedAt: needPublish ? now : (state.publishAskedAt ?? null),
+        ...(AGENT === 'cursor' ? { cursorFollowupSent: true } : {}),
+        ...(AGENT === 'kimi' ? { kimiCaptureDue: true } : {}), // Kimi does not call Stop again in the same turn after a block
       }, env);
       if (needTrackerBlock) appendLog(anchor, data, L.logTrackerBlockAsk, env);
       if (needPublish) appendLog(anchor, data, L.logTrackerPublishAsk, env);
-      emit({ decision: 'block', reason: parts.join('\n\n') });
+      emitStopBlock(parts.join('\n\n'));
       return;
     }
   }
@@ -211,7 +245,11 @@ runHook(async () => {
   if (state && !data.agent_id) {
     removeFile(sp.tool);
     removeFile(sp.tracker);
-    if (state.blockedAt != null) writeState(data.session_id, { ...state, blockedAt: null }, env);
+    if (held && !needReader) removeFile(sp.ctx); // only this turn's instruction was held. An undelivered earlier record moves to the next turn
+    if (state.blockedAt != null || state.cursorFollowupSent || state.kimiCaptureDue) {
+      const { cursorFollowupSent, kimiCaptureDue, ...rest } = state;
+      writeState(data.session_id, { ...rest, blockedAt: null }, env);
+    }
   }
 });
 

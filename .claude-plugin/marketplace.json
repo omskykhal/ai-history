@@ -8,16 +8,19 @@
     {
       "name": "ai-history",
       "source": "./",
-      "description": "One shared, human-readable work history per project for Claude Code and OpenAI Codex, written automatically by hooks.",
-      "version": "0.5.2",
+      "description": "One shared, human-readable work history per project for Claude Code, OpenAI Codex, Grok, Kimi and Cursor, written automatically by hooks.",
+      "version": "0.6.0",
       "category": "productivity",
       "tags": [
         "hooks",
         "memory",
         "history",
-        "codex"
+        "codex",
+        "grok",
+        "kimi",
+        "cursor"
       ]
     }
   ],
-  "description": "Plugins by Yang: ai-history, a shared per-project work history for Claude Code and OpenAI Codex."
+  "description": "Plugins by Yang: ai-history, a shared per-project work history for Claude Code, OpenAI Codex, Grok, Kimi and Cursor."
 }

@@ -1,15 +1,15 @@
 # ai-history
 
-**Claude Code 와 OpenAI Codex 가 프로젝트마다 하나의 작업 히스토리를 자동으로 함께 쓰는 훅.**
+**Claude Code·OpenAI Codex·Grok·Kimi·Cursor 가 프로젝트마다 하나의 작업 히스토리를 자동으로 함께 쓰는 훅.**
 
 [English README](README.md)
 
-작업 중에 노트북을 닫아도, 다음 날 아무 폴더에서나 Claude Code 나 Codex 를 열고 프로젝트 이름만 말하면 에이전트가 `[현황]` 보고로 시작합니다. 무엇을 하던 중이었는지, 어디까지 했는지, 다음에 뭘 할지, 그리고 **마지막으로 누가(claude/codex) 작업했는지**까지.
+작업 중에 노트북을 닫아도, 다음 날 아무 폴더에서나 Claude Code·Codex·Grok·Kimi·Cursor 를 열고 프로젝트 이름만 말하면 에이전트가 `[현황]` 보고로 시작합니다. 무엇을 하던 중이었는지, 어디까지 했는지, 다음에 뭘 할지, 그리고 **마지막으로 누가(claude/codex) 작업했는지**까지.
 
 - 도구 호출마다 `<프로젝트>/.ai-history/YYYY-MM-DD.md` 에 한 줄: `- HH:mm:ss [세션][claude|codex] ▶ [Bash] npm test`
 - 응답 끝에 에이전트가 짧은 상태 블록을 쓰면 훅이 `<프로젝트>/.ai-history/STATUS.md` 로 저장(하던 일 / 한 일 / 다음 할 일 / 진행도)
 - 세션 시작 때, 그리고 프로젝트 이름을 말할 때마다 `STATUS.md` 와 오늘·어제 로그 꼬리를 자동 주입
-- Claude Code 와 Codex 가 **같은 파일**을 읽고 쓰므로 둘을 오가도 타임라인은 하나
+- 이 에이전트들이 **같은 파일**을 읽고 쓰므로 서로 오가도 타임라인은 하나
 - LLM 호출 없음, DB 없음, 클라우드 없음. 프로젝트 폴더 안의 마크다운뿐이고, 쓰는 건 작은 Node 스크립트
 
 ## 요구 사항
@@ -19,6 +19,7 @@
 | Node.js | 18 이상 (`node --version`) |
 | Claude Code | 훅 지원(`SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `Stop`, `SessionEnd`) |
 | OpenAI Codex CLI | 0.160 이상, `hooks` 사용 가능(`codex features list` → `hooks stable true`), 선택 |
+| Grok·Kimi Code·Cursor | Grok 1.0.70·Kimi Code 2.3.3·Cursor 3.20.21 로 확인, 선택. [다른 에이전트](#다른-에이전트-grokkimicursor060) 참고 |
 | OS | **Windows**(검증됨). macOS/Linux: 경로 처리는 구현돼 있으나 **미검증** |
 
 ## 설치
@@ -38,6 +39,9 @@
 node install.mjs --install --root "C:\Users\me\Desktop\Project" --lang ko
 # 2) 선택: Codex 에도 같은 훅 등록(첫 Codex 실행 때 핸들러 5개 신뢰 승인 프롬프트가 뜸)
 node install.mjs --codex-hooks
+# 선택: Kimi Code(~/.kimi-code/config.toml 에 [[hooks]] 6개)와 Grok(세션 시작 훅)
+node install.mjs --kimi-hooks
+node install.mjs --grok-hooks
 # 3) 선택: git 전역 제외 파일에 .ai-history/ 추가(모든 저장소에서 git status 에 안 잡힘)
 node install.mjs --git-ignore
 # 확인
@@ -56,6 +60,8 @@ node install.mjs --status
 ```bash
 node install.mjs --uninstall           # Claude Code 항목만
 node install.mjs --codex-hooks-remove  # Codex 항목만
+node install.mjs --kimi-hooks-remove   # Kimi 항목만
+node install.mjs --grok-hooks-remove   # Grok 파일만
 ```
 
 각 프로젝트의 `.ai-history/` 폴더는 남습니다. 필요 없으면 직접 삭제하세요.
@@ -163,7 +169,7 @@ API 키처럼 보이는 문자열(`AIza…`, `sk-…`, `ghp_…`, `Bearer …`, 
 
 ### 비대화형 실행
 
-`claude -p`·SDK 실행(`CLAUDE_CODE_ENTRYPOINT` 가 `INTERACTIVE_ENTRYPOINTS` 에 없음), 서브에이전트, Claude Code 세션 **안에서** 띄운 Codex 는 기계 로그만 남깁니다. 주입·요구 없음.
+`claude -p`·SDK 실행(`CLAUDE_CODE_ENTRYPOINT` 가 `INTERACTIVE_ENTRYPOINTS` 에 없음), 서브에이전트, Claude Code 세션 **안에서** 띄운 Codex·Grok·Kimi 는 기계 로그만 남깁니다. 주입·요구 없음.
 
 ## 설정
 
@@ -187,6 +193,24 @@ API 키처럼 보이는 문자열(`AIza…`, `sk-…`, `ghp_…`, `Bearer …`, 
 
 별칭은 단어 경계·대소문자 무시·긴 문구 우선으로 맞추고, 구분자는 공백·점·하이픈(`tauko work` = `tauko-work` = `tauko.work`)입니다. 코드 펜스·URL·파일 경로·붙여넣기 블록 안의 글자는 무시하고, 요청문 앞 400자만 봅니다.
 
+## 다른 에이전트: Grok·Kimi·Cursor(0.6.0)
+
+히스토리 파일, STATUS 블록, 누락 시 1회 요구, 재개 명령, 트래커 파일은 같게 동작합니다. 다만 도구마다 훅이 모델에 글을 넣을 수 있는 시점이 달라 전달 시점이 다릅니다.
+
+| | Grok | Kimi Code | Cursor |
+|---|---|---|---|
+| 등록 | `--install`(Grok 이 `~/.claude/settings.json` 을 읽음) + `--grok-hooks` | `--kimi-hooks` | `--install`(Cursor 가 `~/.claude/settings.json` 을 읽음) |
+| 이전 기록과 `[현황]` | 첫 도구 실행 뒤, 도구가 없으면 첫 답변 뒤 | 첫 요청 때 | 세션 시작 때 |
+| 재개 명령 | `grok --resume <id>` | `kimi -S session_<id>` | 없음 |
+| STATUS 블록 누락 | 같은 턴에 1회 요구 | 1회 요구, 교정 응답은 다음 요청이나 세션 종료 때 저장 | 자동 후속 메시지 1회(사용량 차감) |
+
+- Grok 은 신뢰한 폴더(`/hooks-trust`)에서만 훅을 실행합니다. 서브에이전트 세션은 ID 가 달라 기록되지 않습니다.
+- 트래커 페이지 발행과 페이지 판정 읽기는 Artifact 도구가 필요해 Claude 전용입니다. 다른 에이전트도 `TRACKER.json`·HTML·`CHECKLIST.md` 는 만듭니다.
+- 요구를 끄려면 설정 폴더에 `NO_BLOCK_GROK`·`NO_BLOCK_KIMI`·`NO_BLOCK_CURSOR` 파일을 만듭니다.
+- `node import-cursor.mjs <프로젝트 폴더>` 는 지난 Cursor 대화를 `.ai-history/cursor-import-<id8>.md` 로 옮깁니다.
+
+상태: Windows 에서 실제 `grok -p`·`kimi -p` 각 1회와 실제 프로젝트의 Cursor 기록으로 로그·작업자 표시·입력 필드를 확인했습니다. 단독 대화형 Grok·Kimi 에서 모델이 주입 글을 따르는지와 Cursor 후속 메시지는 아직 관찰하지 못했습니다.
+
 ## Claude Code 플러그인 모드(실험)
 
 저장소에 `.claude-plugin/plugin.json` 과 `hooks/hooks.json` 이 들어 있어 `claude --plugin-dir ./ai-history` 로 띄우거나 마켓플레이스에서 설치(`/plugin install ai-history --marketplace omskykhal/ai-history`)할 수 있습니다. 플러그인 모드에서는 설정 폴더가 `CLAUDE_PLUGIN_DATA` 이므로 `ROOT`/`LANG` 파일 대신 환경변수 `AUTO_HISTORY_ROOT`(선택 `AUTO_HISTORY_LANG`)를 씁니다. Codex 는 여전히 `install.mjs --codex-hooks` 가 필요합니다.
@@ -197,9 +221,11 @@ API 키처럼 보이는 문자열(`AIza…`, `sk-…`, `ghp_…`, `Bearer …`, 
 
 ```bash
 node test/run-tests.mjs <scratch-dir>
+node test/run-agent-tests.mjs
+node test/run-cursor-tests.mjs
 ```
 
-266건(훅 동작·앵커 규칙·별칭/폴더 매칭·STATUS 추출·안전 예외·설치기 왕복·영어 모드·로그 보존·다중 세션 STATUS·재개 명령·트래커 페이지·MD 점검표/결과 회수/tracker-test 규칙). 시험 산출물은 OS 임시 폴더에만 생기고 실제 프로젝트엔 쓰지 않습니다.
+270 + 75 + 23건(훅 동작·앵커 규칙·별칭/폴더 매칭·STATUS 추출·안전 예외·설치기 왕복·영어 모드·로그 보존·다중 세션 STATUS·재개 명령·트래커 페이지·MD 점검표/결과 회수/tracker-test 규칙). 시험 산출물은 OS 임시 폴더에만 생기고 실제 프로젝트엔 쓰지 않습니다.
 
 에이전트·스킬 전역 사본(`~/.claude/agents/tracker-verifier.md`, `~/.claude/skills/tracker-test/SKILL.md`)을 두는 경우 `node test/check-global-sync.mjs` 가 이 저장소와 sha1 로 비교합니다(BOM 제거·CRLF→LF 정규화 후): `SYNC OK 2/2`, 「미복사」(종료 코드 0), 「불일치」(종료 코드 1). `npm test` 에는 포함되지 않습니다.
 
@@ -207,6 +233,7 @@ node test/run-tests.mjs <scratch-dir>
 
 - 검증된 플랫폼은 Windows 뿐
 - 두 에이전트가 같은 프로젝트를 동시에 쓰면 로그는 섞이고 `STATUS.md` 는 마지막 작성자 우선(세션별 블록은 `sessions/` 에 남음, 위 절 참고)
+- Claude Code 밖에서 단독 실행한 `grok -p` 는 구분 신호를 찾지 못해 대화형으로 처리됨
 - Codex 의 `Stop` `decision: block` 은 실제 발동을 관찰하지 못함(시험 중 Codex 가 매번 지시를 따름)
 
 ## 제작자 / 라이선스

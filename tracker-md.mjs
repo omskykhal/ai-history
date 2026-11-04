@@ -89,7 +89,7 @@ export function buildChecklistMd(json, opts = {}) {
       const u = it.user && typeof it.user === 'object' ? it.user : {};
       const ast = AI_STATUS.includes(a.status) ? a.status : '-';
       const ust = u.status === 'ok' || u.status === 'fail' ? u.status : '';
-      const by = a.by === 'codex' || a.by === 'claude' ? ` (${a.by})` : '';
+      const by = ['claude', 'codex', 'grok', 'kimi', 'cursor'].includes(a.by) ? ` (${a.by})` : '';
       const aiTxt = `${ast} ${L.mdAst[ast]}${by}${a.note ? ` ${a.note}` : ''}`;
       const uTxt = `${L.mdUst[ust]}${u.note ? ` ${u.note}` : ''}`;
       out.push(`| ${it.id} | ${cell(areaTitle(j, it.area, L.mdOtherArea))} | ${cell(it.title)} | ${cell(it.account)} | ${cell(it.path)} | ${cell(it.todo)} | ${cell(it.expect)} | ${cell(aiTxt)} | ${cell(uTxt)} | ${L.mdResultCell} |`);

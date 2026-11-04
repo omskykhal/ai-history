@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import zlib from 'node:zlib';
+import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { getLang, T, statusFormat, ALL_HEADINGS, AUTHOR_KEYS, UPDATED_KEYS, SESSION_KEYS, RESUME_KEYS, ANCHOR_KEYS, KW_PROJECT, KW_FOLDER } from './i18n.mjs';
 
@@ -24,13 +25,14 @@ export function parseAgent(argv = process.argv) {
     return 'claude';
   }
 }
-export const AGENT = parseAgent();
+// Grok and Cursor load ~/.claude/settings.json hooks without --agent, so readInput() switches this after looking at the input.
+export let AGENT = parseAgent();
 
 // The only environment variables the hooks read. Everything else in the host environment (tokens, API keys,
 // other tools' settings) is never looked at: every hook builds its `env` with hookEnv() instead of using process.env.
 export const ENV_KEYS = [
   'AUTO_HISTORY_ROOT', 'AUTO_HISTORY_LANG', 'AUTO_HISTORY_DIRNAME', 'AUTO_HISTORY_DISABLE', 'AUTO_HISTORY_NO_BLOCK',
-  'AUTO_HISTORY_CONF_DIR', 'AUTO_HISTORY_STATE_DIR', 'AUTO_HISTORY_KEEP_DAYS', 'AUTO_HISTORY_ARCHIVE_DAYS', 'AUTO_HISTORY_SESSIONS_DAYS',
+  'AUTO_HISTORY_CONF_DIR', 'AUTO_HISTORY_STATE_DIR', 'AUTO_HISTORY_KIMI_HOME', 'AUTO_HISTORY_KEEP_DAYS', 'AUTO_HISTORY_ARCHIVE_DAYS', 'AUTO_HISTORY_SESSIONS_DAYS',
   'CLAUDE_CODE_ENTRYPOINT', 'CLAUDE_PROJECT_DIR', 'CLAUDE_PLUGIN_ROOT', 'CLAUDE_PLUGIN_DATA', 'CLAUDECODE', 'CLAUDE_CODE_SESSION_ID',
   'CLAUDE_CODE_SESSION_ATTENDED', 'CLAUDE_CODE_CHILD_SESSION', 'AI_AGENT',
 ];
@@ -88,22 +90,95 @@ export function readStdin(timeoutMs = 2000) {
     };
     const timer = setTimeout(() => {
       try { process.stdin.removeAllListeners(); process.stdin.destroy(); } catch { /* ignore */ }
-      done(Buffer.concat(chunks).toString('utf-8'));
+      done(decodeInput(Buffer.concat(chunks)));
     }, timeoutMs);
     process.stdin.on('data', (c) => chunks.push(c));
-    process.stdin.on('end', () => done(Buffer.concat(chunks).toString('utf-8')));
+    process.stdin.on('end', () => done(decodeInput(Buffer.concat(chunks))));
     process.stdin.on('error', () => done(''));
-    if (process.stdin.readableEnded) done(Buffer.concat(chunks).toString('utf-8'));
+    if (process.stdin.readableEnded) done(decodeInput(Buffer.concat(chunks)));
   });
+}
+
+// stdin that passed through PowerShell can carry a BOM or be UTF-16; a leftover BOM would make JSON.parse fail and lose the record silently.
+export function decodeInput(buf) {
+  if (buf.length >= 2 && buf[0] === 0xff && buf[1] === 0xfe) return buf.subarray(2).toString('utf16le');
+  if (buf.length >= 2 && buf[0] === 0xfe && buf[1] === 0xff) return Buffer.from(buf.subarray(2)).swap16().toString('utf16le');
+  if (buf.length >= 3 && buf[0] === 0xef && buf[1] === 0xbb && buf[2] === 0xbf) return buf.subarray(3).toString('utf-8');
+  return buf.toString('utf-8');
+}
+
+// Why an input could not be read: length and the first 16 char codes only, never the body (20 KB cap).
+function noteInputFailure(raw, kind, env = hookEnv()) {
+  try {
+    const file = path.join(getStateDir(env), 'input-errors.log');
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    if (fs.existsSync(file) && fs.statSync(file).size > 20 * 1024) return;
+    const head = Array.from(String(raw).slice(0, 16)).map((c) => c.charCodeAt(0).toString(16)).join(' ');
+    fs.appendFileSync(file, `${new Date().toISOString()} ${path.basename(process.argv[1] || '')} ${kind} len=${String(raw).length} head=${head}\n`, 'utf-8');
+  } catch { /* fail-open */ }
+}
+
+// Cursor input → common shape. workspace_roots look like `/c:/Users/…` and prompt / session events have no cwd.
+export function cursorRootToPath(r) {
+  const s = String(r == null ? '' : r);
+  const m = s.match(/^\/([a-zA-Z]:(?:\/.*)?)$/);
+  return m ? m[1] : s;
+}
+const GROK_SOURCES = { new: 'startup', load: 'resume' };
+// Grok input (camelCase plus Claude snake_case aliases). Recognized by its shape because it loads ~/.claude/settings.json hooks without arguments.
+function normalizeGrokInput(data) {
+  AGENT = 'grok';
+  const out = { ...data };
+  if (!out.session_id && out.sessionId) out.session_id = out.sessionId;
+  if (!out.tool_name && out.toolName) out.tool_name = out.toolName;
+  if (!out.tool_input && out.toolInput) out.tool_input = out.toolInput;
+  if (out.last_assistant_message === undefined && out.lastAssistantMessage !== undefined) out.last_assistant_message = out.lastAssistantMessage;
+  if (out.stop_hook_active === undefined && out.stopHookActive !== undefined) out.stop_hook_active = out.stopHookActive;
+  if (out.duration_ms === undefined && out.durationMs !== undefined) out.duration_ms = out.durationMs;
+  if (!out.agent_id && out.subagentType) out.agent_id = out.subagentType; // sub-agents: log only
+  const src = out.source !== undefined ? out.source : out.startSource;
+  out.source = GROK_SOURCES[src] || (VALID_SOURCES.includes(src) ? src : 'startup');
+  return out;
+}
+// Kimi input. Ids are session_<uuid>, so the first 8 chars would all match: the prefix is dropped (the resume command adds it back). prompt can be an array.
+function normalizeKimiInput(data) {
+  const out = { ...data };
+  if (typeof out.session_id === 'string') out.session_id = out.session_id.replace(/^session_/, '');
+  if (Array.isArray(out.prompt)) out.prompt = out.prompt.filter((p) => p && p.type === 'text' && typeof p.text === 'string').map((p) => p.text).join('\n');
+  if (out.source !== undefined && !VALID_SOURCES.includes(out.source)) out.source = 'startup';
+  return out;
+}
+export function normalizeHookInput(data, env = hookEnv()) {
+  if (!data) return data;
+  if (AGENT === 'kimi') return normalizeKimiInput(data);
+  if (typeof data.cursor_version !== 'string') {
+    if (AGENT === 'grok' || (AGENT === 'claude' && typeof data.workspaceRoot === 'string' && typeof data.hookEventName === 'string')) return normalizeGrokInput(data);
+    return data;
+  }
+  AGENT = 'cursor';
+  const out = { ...data };
+  if (!out.session_id && out.conversation_id) out.session_id = out.conversation_id;
+  if (!out.cwd) {
+    const toolCwd = out.tool_input && typeof out.tool_input === 'object' && typeof out.tool_input.cwd === 'string' ? out.tool_input.cwd : '';
+    const roots = (Array.isArray(out.workspace_roots) ? out.workspace_roots : []).map(cursorRootToPath).filter(Boolean);
+    out.cwd = toolCwd || roots.find((r) => inScope(r, env)) || roots[0] || '';
+  }
+  if (out.source === undefined && out.hook_event_name === 'sessionStart') out.source = 'startup';
+  if (out.duration_ms === undefined && typeof out.duration === 'number') out.duration_ms = out.duration;
+  return out;
 }
 
 export async function readInput() {
   const raw = await readStdin(2000);
-  if (!raw || !raw.trim()) return null;
+  if (!raw || !raw.trim()) {
+    noteInputFailure(raw || '', 'empty');
+    return null;
+  }
   try {
     const data = JSON.parse(raw);
-    return data && typeof data === 'object' && !Array.isArray(data) ? data : null;
+    return data && typeof data === 'object' && !Array.isArray(data) ? normalizeHookInput(data) : null;
   } catch {
+    noteInputFailure(raw, 'parse');
     return null;
   }
 }
@@ -208,10 +283,11 @@ function nestedMarkerHit(file, env, src = process.env) {
 // Interactive-session test (all conditions must hold). §15.4: agent=codex has its own rule.
 export function isInteractive(data, env = process.env, agent = AGENT) {
   if (env.AUTO_HISTORY_DISABLE === '1') return false;
-  if (agent === 'codex') {
-    // codex spawned inside a Claude Code session → non-interactive (log only)
+  if (agent === 'cursor') return !(data && data.is_background_agent === true);
+  if (agent === 'codex' || agent === 'grok' || agent === 'kimi') {
+    // spawned inside a Claude Code session → non-interactive (log only)
     if (env.CLAUDECODE === '1' || env.CLAUDE_CODE_ENTRYPOINT !== undefined) return false;
-    return !nestedMarkerHit('NESTED_MARKERS_CODEX', env);
+    return !nestedMarkerHit(agentConfName('NESTED_MARKERS', agent), env);
   }
   const ep = env.CLAUDE_CODE_ENTRYPOINT || '';
   if (!ep) return false;
@@ -223,9 +299,97 @@ export function isInteractive(data, env = process.env, agent = AGENT) {
   return !nestedMarkerHit('NESTED_MARKERS', env);
 }
 
-// §15.4: per-agent conf file names (codex → <NAME>_CODEX, separate from the Claude flags)
+// §15.4: per-agent conf file names (anything but claude → <NAME>_<AGENT>, separate from the Claude flags)
 export function agentConfName(name, agent = AGENT) {
-  return agent === 'codex' ? `${name}_CODEX` : name;
+  return agent === 'claude' ? name : `${name}_${String(agent).toUpperCase()}`;
+}
+
+// Where each tool lets a hook put text in front of the model:
+// claude, codex: session start, prompt / cursor: session start, after a tool / grok: after a tool, Stop / kimi: prompt, Stop
+export const hasToolContext = (agent = AGENT) => agent === 'cursor' || agent === 'grok';
+export const hasSessionContext = (agent = AGENT) => agent === 'claude' || agent === 'codex' || agent === 'cursor';
+export const hasArtifactTools = (agent = AGENT) => agent === 'claude' || agent === 'codex';
+
+export function emitPromptContext(ctx, agent = AGENT) {
+  if (agent === 'kimi') { process.stdout.write(ctx); return; } // Kimi appends plain text as is; from JSON it reads only `message`
+  emit({ hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext: ctx } });
+}
+export function emitToolContext(ctx, agent = AGENT) {
+  const claudeForm = { hookSpecificOutput: { hookEventName: 'PostToolUse', additionalContext: ctx } };
+  // Cursor's docs do not say which form it reads from hooks loaded out of Claude settings, so both are sent
+  emit(agent === 'cursor' ? { additional_context: ctx, ...claudeForm } : claudeForm);
+}
+export function emitStopBlock(reason, agent = AGENT) {
+  // Cursor turns Claude's decision + reason into an automatic follow-up user message (third-party hooks docs); its native field is sent too
+  if (agent === 'cursor') emit({ followup_message: reason, decision: 'block', reason });
+  else if (agent === 'kimi') emit({ hookSpecificOutput: { hookEventName: 'Stop', permissionDecision: 'deny', permissionDecisionReason: reason } });
+  else emit({ decision: 'block', reason });
+}
+
+// Context held per session until the tool's next delivery point: { reader, instruction }
+export function readPending(sid, env = process.env) {
+  try {
+    const j = JSON.parse(fs.readFileSync(statePaths(sid, env).ctx, 'utf-8'));
+    return j && typeof j === 'object' ? j : null;
+  } catch {
+    return null;
+  }
+}
+export function writePending(sid, pending, env = process.env) {
+  const p = statePaths(sid, env);
+  fs.mkdirSync(p.dir, { recursive: true });
+  writeAtomic(p.ctx, JSON.stringify(pending));
+}
+export function pendingText(p) {
+  return p ? [p.instruction, p.reader].filter(Boolean).join('\n\n') : ''; // instruction first: Grok clips this text at 10,000 characters
+}
+
+// Kimi does not call Stop again after a block, so the corrected reply is handled at the next prompt / session end by re-running stop.mjs.
+export function kimiLateCapture(data, env = process.env) {
+  try {
+    const st = data && !data.agent_id ? readState(data.session_id, env) : null;
+    if (!st || !st.kimiCaptureDue) return;
+    spawnSync(process.execPath, [path.join(HOOK_DIR, 'stop.mjs'), '--agent', 'kimi'], {
+      input: JSON.stringify({ session_id: data.session_id, cwd: data.cwd, hook_event_name: 'Stop', stop_hook_active: true, late_capture: true }),
+      env: { ...env, ...(process.env.SystemRoot ? { SystemRoot: process.env.SystemRoot } : {}) },
+      timeout: 2500, windowsHide: true, stdio: ['pipe', 'ignore', 'ignore'],
+    });
+  } catch (e) { warn(e && e.message); }
+}
+const KIMI_MESSAGE_EVENTS = ['agent.message.appended', 'context.append_message'];
+// Kimi's Stop input has no reply text or transcript path: read the session file. null = the last message is not the final reply (not written yet).
+// skipUser: reading the previous turn's reply at the next prompt, skip the new request line.
+export function kimiLastMessage(sid, env = process.env, { skipUser = false } = {}) {
+  try {
+    const home = env.AUTO_HISTORY_KIMI_HOME || path.join(os.homedir(), '.kimi-code');
+    const base = path.join(home, 'sessions');
+    let file = '';
+    for (const wd of fs.readdirSync(base)) {
+      const f = path.join(base, wd, `session_${sid}`, 'agents', 'main', 'wire.jsonl');
+      if (fs.existsSync(f)) { file = f; break; }
+    }
+    if (!file) return null;
+    const size = fs.statSync(file).size;
+    const n = Math.min(size, 256 * 1024);
+    const buf = Buffer.alloc(n);
+    const fd = fs.openSync(file, 'r');
+    try { fs.readSync(fd, buf, 0, n, size - n); } finally { fs.closeSync(fd); }
+    const lines = buf.toString('utf-8').split('\n');
+    for (let i = lines.length - 1; i >= 0; i--) {
+      if (!lines[i].trim()) continue;
+      let o;
+      try { o = JSON.parse(lines[i]); } catch { continue; }
+      if (!KIMI_MESSAGE_EVENTS.includes(o.type) || !o.message) continue;
+      const m = o.message.message || o.message;
+      if (skipUser && m.role === 'user') continue;
+      if (m.role !== 'assistant' || (Array.isArray(m.toolCalls) && m.toolCalls.length)) return null;
+      const c = Array.isArray(m.content) ? m.content : [];
+      return c.filter((b) => b && b.type === 'text' && typeof b.text === 'string').map((b) => b.text).join('\n');
+    }
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 export function confFileExists(name, env = process.env) {
@@ -238,7 +402,7 @@ function safeSid(sid) {
 export function statePaths(sid, env = process.env) {
   const dir = getStateDir(env);
   const s = safeSid(sid);
-  return { dir, json: path.join(dir, `${s}.json`), tool: path.join(dir, `${s}.tool`), tracker: path.join(dir, `${s}.tracker`) };
+  return { dir, json: path.join(dir, `${s}.json`), tool: path.join(dir, `${s}.tool`), tracker: path.join(dir, `${s}.tracker`), ctx: path.join(dir, `${s}.ctx`) };
 }
 export function readState(sid, env = process.env) {
   if (!sid) return null;
@@ -326,6 +490,7 @@ export function resolveAnchor(data, env = process.env, opts = {}) {
     blockedAt: (state && state.blockedAt) || null,
     createdAt: (state && state.createdAt) || new Date().toISOString(),
     agent: AGENT,
+    ...(state && state.background ? { background: true } : {}),
     ...track,
   };
   try { writeState(data.session_id, st, env); } catch (e) { warn(e.message); }
@@ -695,6 +860,8 @@ export function resumeCommand(sid, agent = AGENT) {
   if (!id || /[\s"'`]/.test(id)) return '';
   if (agent === 'claude') return `claude --resume ${id}`;
   if (agent === 'codex') return `codex resume ${id}`;
+  if (agent === 'grok') return `grok --resume ${id}`;
+  if (agent === 'kimi') return `kimi -S ${id.startsWith('session_') ? id : `session_${id}`}`;
   return '';
 }
 
@@ -813,19 +980,30 @@ export function tailLines(file, n) {
   }
 }
 
+// Tool names and input keys differ per agent (Grok run_terminal_command / target_file, Cursor Shell / StrReplace / path, Kimi path).
+const SHELL_TOOLS = ['Bash', 'PowerShell', 'Shell', 'run_terminal_command'];
+const EDIT_TOOLS = ['Write', 'Edit', 'MultiEdit', 'NotebookEdit', 'StrReplace', 'EditNotebook', 'write', 'search_replace', 'hashline_edit'];
+const READ_TOOLS = ['Read', 'read_file'];
+const SEARCH_TOOLS = ['Glob', 'Grep', 'grep', 'list_dir', 'List'];
+const AGENT_TOOLS = ['Agent', 'Task', 'spawn_subagent'];
+function toolFilePath(ti) {
+  const v = [ti.file_path, ti.target_file, ti.path, ti.notebook_path, ti.target_notebook].find((x) => typeof x === 'string' && x);
+  return v || '';
+}
+
 // Tool summary for the log. tool_response is never used.
 export function summarizeTool(data) {
   const name = String(data.tool_name || '(unknown)');
   const ti = data.tool_input && typeof data.tool_input === 'object' ? data.tool_input : {};
   let target = '';
-  if (name === 'Bash' || name === 'PowerShell') {
+  if (SHELL_TOOLS.includes(name)) {
     target = oneLine(mask(oneLine(ti.command || '')), 200);
-  } else if (['Read', 'Edit', 'Write', 'NotebookEdit'].includes(name)) {
-    target = normalizeWinPath(ti.file_path || ti.notebook_path || '');
-  } else if (name === 'Glob' || name === 'Grep') {
+  } else if (EDIT_TOOLS.includes(name) || READ_TOOLS.includes(name)) {
+    target = normalizeWinPath(toolFilePath(ti));
+  } else if (SEARCH_TOOLS.includes(name)) {
     target = oneLine(mask(String(ti.pattern || '')), 200);
-    if (ti.path) target += ` (${normalizeWinPath(String(ti.path))})`;
-  } else if (name === 'Agent' || name === 'Task') {
+    if (ti.path) target = `${target} (${normalizeWinPath(String(ti.path))})`.trim();
+  } else if (AGENT_TOOLS.includes(name)) {
     target = oneLine(mask(String(ti.description || '')), 200);
   } else if (name === 'Skill') {
     target = oneLine(String(ti.skill || ''), 200);
@@ -856,7 +1034,6 @@ export const TRACKER_READER_MAX = 1200;
 const TRACKER_BEGIN_RE = /^\s*<!-- TRACKER:BEGIN -->\s*$/;
 const TRACKER_END_RE = /^\s*<!-- TRACKER:END -->\s*$/;
 const TRACKER_FENCE_RE = /^\s*(```|~~~)/;
-const TRACKER_EDIT_TOOLS = ['Write', 'Edit', 'MultiEdit', 'NotebookEdit'];
 const TRACKER_SKIP_DIRS = ['.ai-history', '.omc', '.claude', 'node_modules', '.git'];
 
 // Block format / wording rules in the active language (default-env constants kept for direct use).
@@ -931,15 +1108,17 @@ export function isTrackerChangeTool(data, anchor, env = process.env) {
     if (!data || data.agent_id || !anchor) return false;
     const name = String(data.tool_name || '');
     const ti = data.tool_input && typeof data.tool_input === 'object' ? data.tool_input : {};
-    if (TRACKER_EDIT_TOOLS.includes(name)) {
-      const p = normalizeWinPath(String(ti.file_path || ti.notebook_path || ''));
+    if (EDIT_TOOLS.includes(name)) {
+      const fp = toolFilePath(ti);
+      const relative = fp && !/^[a-zA-Z]:|^[\\/]/.test(fp); // Kimi and Cursor also take relative paths; /c/… stays absolute
+      const p = normalizeWinPath(relative && data.cwd ? path.resolve(String(data.cwd), fp) : fp);
       const a = normalizeWinPath(anchor);
       if (!p || !a || !p.startsWith(a + SEP)) return false;
       const segs = p.slice(a.length + 1).split(SEP);
       const skip = new Set(TRACKER_SKIP_DIRS.concat([historyDirName(env).toLowerCase()]));
       return !segs.slice(0, -1).some((s) => skip.has(s.toLowerCase()));
     }
-    if (name === 'Bash' || name === 'PowerShell') return TRACKER_CHANGE_RE.test(String(ti.command || ''));
+    if (SHELL_TOOLS.includes(name)) return TRACKER_CHANGE_RE.test(String(ti.command || ''));
     return false;
   } catch {
     return false;
@@ -969,7 +1148,7 @@ export function extractTracker(msg) {
 
 const tStr = (v) => (typeof v === 'string' ? v.slice(0, TRACKER_STR_MAX) : null);
 const AI_STATUS = ['ok', 'fail', '-'];
-const AI_BY = ['claude', 'codex'];
+export const AI_BY = ['claude', 'codex', 'grok', 'kimi', 'cursor'];
 const USER_STATUS = ['ok', 'fail', ''];
 export function emptyTracker(now = new Date().toISOString()) {
   return {

@@ -1,8 +1,8 @@
 {
   "name": "ai-history",
   "displayName": "ai-history",
-  "version": "0.5.2",
-  "description": "One shared, human-readable work history per project for Claude Code and OpenAI Codex, written automatically by hooks.",
+  "version": "0.6.0",
+  "description": "One shared, human-readable work history per project for Claude Code, OpenAI Codex, Grok, Kimi and Cursor, written automatically by hooks.",
   "author": {
     "name": "Yang",
     "email": "omskykhal@gmail.com"
@@ -15,6 +15,9 @@
     "session-memory",
     "history",
     "codex",
+    "grok",
+    "kimi",
+    "cursor",
     "markdown"
   ]
 }

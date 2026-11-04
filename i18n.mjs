@@ -33,6 +33,8 @@ const STR = {
       + '첫 줄 `[현황]`으로 3~8줄 보고 후 이번 요청을 수행하라. `마지막 작업자` 줄이 있으면 `[현황]` 첫 줄에 마지막 작업자와 시각을 포함하라. '
       + `이 프로젝트 작업은 \`${dir}\` 기준으로 하라. 미완료 작업은 지시 없이 재개하지 마라.`,
     blockReason: (fmt) => `[auto-history] 이번 응답에 상태 블록이 없습니다. 아래 형식의 블록만 출력하고 종료하세요:\n${fmt}`,
+    sessionStatusReminder: (fmt) => `[auto-history] 도구를 1건 이상 사용한 응답은 맨 끝에 아래 블록을 그대로 출력하라. 각 제목 아래 1~5줄, 한국어, 확인된 사실만.\n${fmt}`,
+    readerDelivered: '이 기록을 방금 전달받았다. 위 지시대로 `[현황]`을 보고하라.',
     logAnchorSet: (a) => `[anchor] 지정 ${a}`,
     logAnchorChange: (o, n) => `[anchor] 변경 ${o}→${n}`,
     logTurnEndStatus: (rest) => `[Turn-end] STATUS 갱신 | ${rest}`,
@@ -197,6 +199,8 @@ const STR = {
       + 'Start with `[Status]` and report in 3-8 lines, then carry out the request. If a `Last worker` line is present, include the last worker and time in the first `[Status]` line. '
       + `Work on this project relative to \`${dir}\`. Do not resume unfinished work without an instruction.`,
     blockReason: (fmt) => `[auto-history] This reply has no status block. Output only a block in the format below and stop:\n${fmt}`,
+    sessionStatusReminder: (fmt) => `[auto-history] Any reply in which you used at least one tool must END with the block below, verbatim. 1-5 lines under each heading, verified facts only.\n${fmt}`,
+    readerDelivered: 'You just received this record. Report `[Status]` as instructed above.',
     logAnchorSet: (a) => `[anchor] set ${a}`,
     logAnchorChange: (o, n) => `[anchor] changed ${o}→${n}`,
     logTurnEndStatus: (rest) => `[Turn-end] STATUS updated | ${rest}`,

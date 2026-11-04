@@ -229,7 +229,7 @@ var D = /*__TRACKER_DATA__*/null;
     if (c && (!u.at || String(c.at || '') >= String(u.at || ''))) return { status: c.status || '', note: c.note || '', at: c.at || '' };
     return { status: u.status || '', note: u.note || '', at: u.at || '' };
   }
-  function aiOf(it) { var a = it.ai || {}; return { status: a.status === 'ok' || a.status === 'fail' ? a.status : '-', note: a.note || '', at: a.at || '', by: a.by === 'codex' || a.by === 'claude' ? a.by : '' }; }
+  function aiOf(it) { var a = it.ai || {}; return { status: a.status === 'ok' || a.status === 'fail' ? a.status : '-', note: a.note || '', at: a.at || '', by: ['claude', 'codex', 'grok', 'kimi', 'cursor'].indexOf(a.by) >= 0 ? a.by : '' }; }
 
   function setSync(s, cls) { var w = document.getElementById('sync'); if (w) { w.textContent = s; w.className = 'sync ' + (cls || ''); } }
 
