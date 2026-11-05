@@ -1038,7 +1038,7 @@ const TRACKER_SKIP_DIRS = ['.ai-history', '.omc', '.claude', 'node_modules', '.g
 
 // Block format / wording rules in the active language (default-env constants kept for direct use).
 export function trackerFormatFor(env = process.env) { return t(env).trackerFormat; }
-export function trackerRulesFor(env = process.env) { const L = t(env); return `${L.trackerRules} ${L.trackerRulesKeepAi} ${L.trackerRulesCred}`; }
+export function trackerRulesFor(env = process.env) { const L = t(env); return `${L.trackerRules} ${L.trackerRulesKeepAi}`; }
 export const TRACKER_FORMAT = trackerFormatFor();
 export const TRACKER_RULES = trackerRulesFor();
 
@@ -1048,7 +1048,6 @@ export function trackerHtmlPath(anchor, env = process.env) { return path.join(hi
 export const TRACKER_MD_REL = 'tracker/CHECKLIST.md';
 export function trackerMdPath(anchor, env = process.env) { return path.join(historyDir(anchor, env), ...TRACKER_MD_REL.split('/')); }
 export const TRACKER_MD_TOOL = path.join(HOOK_DIR, 'tracker-md.mjs');
-export const TRACKER_CRED_TOOL = path.join(HOOK_DIR, 'tracker-cred.mjs');
 
 export function readTracker(anchor, env = process.env) {
   try {
@@ -1200,7 +1199,7 @@ export function mergeTracker(json, block, opts = {}) {
       if (!cur) {
         if (j.items.length >= TRACKER_ITEMS_MAX) continue; // total item cap
         cur = {
-          id: it.id, area: '', title: '', account: '', path: '', todo: '', expect: '', check: '',
+          id: it.id, area: '', title: '', account: '', path: '', todo: '', expect: '',
           ai: { status: '-', note: '', at: null }, user: { status: '', note: '', at: null },
           addedAt: now, updatedAt: now, by,
         };
@@ -1213,10 +1212,9 @@ export function mergeTracker(json, block, opts = {}) {
       const areaId = typeof it.area === 'string' && TRACKER_ID_RE.test(it.area) ? it.area : (cur.area || it.id.split('-')[0]);
       if (cur.area !== areaId) { cur.area = areaId; itemChanged = true; }
       ensureArea(areaId, null);
-      // check (0.5.2): agent check command (tracker-cred.mjs login/run). Older items may lack the key, so treat it as ''.
-      for (const k of ['title', 'account', 'path', 'todo', 'expect', 'check']) {
+      for (const k of ['title', 'account', 'path', 'todo', 'expect']) {
         const v = tStr(it[k]);
-        if (v !== null && v !== (cur[k] || '')) { cur[k] = v; itemChanged = true; }
+        if (v !== null && v !== cur[k]) { cur[k] = v; itemChanged = true; }
       }
       if (it.ai && typeof it.ai === 'object') {
         const old = cur.ai && typeof cur.ai === 'object' ? cur.ai : { status: '-', note: '', at: null };
@@ -1342,7 +1340,7 @@ export function trackerInstruction(elig, json, agent = AGENT, anchor = elig && e
     if (!elig || elig.reason === 'TRACKER_OFF') return '';
     const L = t(env);
     if (elig.mode === 'legacy' || elig.mode === 'off') return L.trackerOffHint;
-    const parts = [`${L.trackerOn(historyDirName(env), TRACKER_FILE, trackerFormatFor(env), trackerRulesFor(env))}\n${L.trackerTool} node "${TRACKER_MD_TOOL}"\n${L.credTool} node "${TRACKER_CRED_TOOL}"`];
+    const parts = [`${L.trackerOn(historyDirName(env), TRACKER_FILE, trackerFormatFor(env), trackerRulesFor(env))}\n${L.trackerTool} node "${TRACKER_MD_TOOL}"`];
     const j = json || (elig && elig.json);
     if (elig.mode === 'on' && j && j.pending && agent === 'claude' && anchor) parts.push(PUBLISH_INSTRUCTION(anchor, j, env));
     return parts.join('\n\n');

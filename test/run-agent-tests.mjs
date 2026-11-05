@@ -261,8 +261,8 @@ run('session-start.mjs', k({ source: 'startup' }, kaid, ka), KA);
 const kmix = run('prompt-submit.mjs', k({ prompt: 'kimib 프로젝트 고쳐줘' }, kaid, ka), KA);
 check('언급으로 앵커 변경: 새 폴더 기록만', kmix.stdout.includes('폴더B 표지') && !kmix.stdout.includes('폴더A 표지'), kmix.stdout);
 
-check('/c/ 절대 경로 트래커 판정(회귀)', C.isTrackerChangeTool({ tool_name: 'Write', cwd: 'C:\\Users\\khalo', tool_input: { file_path: '/c/Users/khalo/Desktop/Project/x/a.ts' } }, 'c:\\users\\khalo\\desktop\\project\\x', baseEnv));
-check('상대 경로 트래커 판정', C.isTrackerChangeTool({ tool_name: 'Write', cwd: 'C:\\Users\\khalo\\Desktop\\Project\\x', tool_input: { path: 'src/a.ts' } }, 'c:\\users\\khalo\\desktop\\project\\x', baseEnv));
+check('/c/ 절대 경로 트래커 판정(회귀)', C.isTrackerChangeTool({ tool_name: 'Write', cwd: 'C:\\Users\\me', tool_input: { file_path: '/c/Users/me/Desktop/Project/x/a.ts' } }, 'c:\\users\\me\\desktop\\project\\x', baseEnv));
+check('상대 경로 트래커 판정', C.isTrackerChangeTool({ tool_name: 'Write', cwd: 'C:\\Users\\me\\Desktop\\Project\\x', tool_input: { path: 'src/a.ts' } }, 'c:\\users\\me\\desktop\\project\\x', baseEnv));
 
 // ---- 순수 함수·회귀
 check('재개 명령', C.resumeCommand('abc', 'grok') === 'grok --resume abc' && C.resumeCommand('session_abc', 'kimi') === 'kimi -S session_abc' && C.resumeCommand('abc', 'cursor') === '' && C.resumeCommand('abc', 'codex') === 'codex resume abc' && C.resumeCommand('abc', 'claude') === 'claude --resume abc');

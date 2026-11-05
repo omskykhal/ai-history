@@ -37,7 +37,7 @@ check('Cursor 정규화', n.cwd.toLowerCase() === rootUri.slice(1).toLowerCase()
 check('도구 cwd 우선', C.normalizeHookInput(base('s', { tool_input: { cwd: 'c:\\t' } }), env).cwd === 'c:\\t');
 check('Shell 요약', C.summarizeTool({ tool_name: 'Shell', tool_input: { command: 'dir' } }) === '[Shell] dir');
 check('백그라운드는 비대화형', !C.isInteractive({ is_background_agent: true }, env, 'cursor') && C.isInteractive({}, env, 'cursor'));
-check('slug', cursorProjectSlug('C:\\Users\\khalo\\Desktop\\Project\\mind') === 'c-Users-khalo-Desktop-Project-mind', cursorProjectSlug('C:\\Users\\khalo\\Desktop\\Project\\mind'));
+check('slug', cursorProjectSlug('C:\\Users\\me\\Desktop\\Project\\mind') === 'c-Users-me-Desktop-Project-mind', cursorProjectSlug('C:\\Users\\me\\Desktop\\Project\\mind'));
 
 // 훅 실행: 프롬프트 → 도구 → 종료
 const sid = 'f30e6b94-aaaa-4000-8000-000000000001';

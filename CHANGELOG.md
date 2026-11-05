@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.1 — 2026-11-05
+
+Removes the account tool (`tracker-cred.mjs`) and the `items[].check` / `kind: "cmd"` contract added in 0.5.2. That tool read test-account passwords from a project file and sent them to the Firebase Auth REST API, which the plugin directory flags as credential forwarding (MCP_FORWARDS_CREDENTIAL_ENV) and which is a project-specific workflow rather than part of a shared history. Hooks, the installer, `hooks/hooks.json` and the history / STATUS / tracker files are unchanged.
+
+- Removed `tracker-cred.mjs`, the "Account tool" lines and rules in the checklist, the tracker instruction's account sentence, the "Check command" card row and the related i18n keys (ko / en). `TRACKER.json` stays version 1; a `check` field on an item is no longer carried or classified.
+- `agents/tracker-verifier.md` / `skills/tracker-test/SKILL.md`: back to http / ui items only.
+- Tests: 266 cases (row 14 (ca)–(cd) removed); test fixtures no longer contain a real user name in paths.
+
 ## 0.6.0 — 2026-11-04
 
 Grok, Kimi Code and Cursor now get the same history, STATUS block, one-time nudge, resume command and tracker files as Claude Code and Codex. `TRACKER.json` stays version 1. Hook events for Claude Code and Codex are unchanged.
