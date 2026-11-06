@@ -72,7 +72,7 @@ Project folders keep their `.ai-history/` folders; delete them yourself if you n
 
 Only folders **inside your root** (`--root`) get a `.ai-history/`. Nothing is ever written in your home folder or a temp folder. For each session the anchor is decided in this order:
 
-1. A project named in your prompt: an alias from `ALIASES`, or `<folder name> project` / `project <folder name>` (`folder` also works for depth-1 folders). The folder must be at depth 1 or 2 under the root.
+1. A project named in your prompt: an alias from `ALIASES`, or `<folder name> project` / `project <folder name>` (`folder` also works for depth-1 folders). The folder must be at depth 1 or 2 under the root. When no name is found, an absolute path in the prompt is used instead: the path of a project folder itself counts like its name (`C:\Projects\MyApp is the project folder, fix …`), and a path inside a project counts only while the session has no anchor yet. Quote a path whose folder name has spaces.
 2. The working directory, when it really changed since the last prompt and is inside the root (a sub-folder of the current anchor keeps the anchor).
 3. The anchor already recorded for this session.
 4. No anchor yet and the working directory is inside the root → adopt it.
@@ -191,7 +191,7 @@ All files live next to the scripts (or in `AUTO_HISTORY_CONF_DIR`). Missing file
 | `AUTO_HISTORY_DISABLE=1` | turn everything off for that process (e.g. a daemon) |
 | `AUTO_HISTORY_STATE_DIR` | per-session state files (default `state/` in the conf dir) |
 
-Aliases are matched on word boundaries, case-insensitively, longest phrase first; separators may be space, dot or hyphen (`tauko work` = `tauko-work` = `tauko.work`). Text inside code fences, URLs, file paths and pasted blocks is ignored, and only the first 400 characters of the prompt are scanned.
+Aliases are matched on word boundaries, case-insensitively, longest phrase first; separators may be space, dot or hyphen (`tauko work` = `tauko-work` = `tauko.work`). Text inside code fences, URLs, file paths and pasted blocks is ignored, and only the first 400 characters of the prompt are scanned. A project name that merely appears inside a path is not a name match; the path itself is handled by the path rule above (inside the root only; paths in code fences, URLs and pasted blocks are ignored there too).
 
 ## Other agents: Grok, Kimi, Cursor (0.6.0)
 
@@ -225,7 +225,7 @@ node test/run-agent-tests.mjs
 node test/run-cursor-tests.mjs
 ```
 
-270 + 75 + 23 cases (hook behaviour, anchor rules, alias/folder matching, STATUS extraction, safety exceptions, installer round-trips, English mode, log retention, multi-session STATUS, resume command, tracker page, MD checklist / result pickup / tracker-test rules). Test artifacts go to the OS temp dir, never into a real project.
+266 + 92 + 23 cases (hook behaviour, anchor rules, alias/folder matching, STATUS extraction, safety exceptions, installer round-trips, English mode, log retention, multi-session STATUS, resume command, tracker page, MD checklist / result pickup / tracker-test rules). Test artifacts go to the OS temp dir, never into a real project.
 
 If you keep global copies of the agent and skill (`~/.claude/agents/tracker-verifier.md`, `~/.claude/skills/tracker-test/SKILL.md`), `node test/check-global-sync.mjs` compares them with this repo (sha1 after removing a BOM and turning CRLF into LF): `SYNC OK 2/2`, "not copied" (exit 0) or "mismatch" (exit 1). It is not part of `npm test`.
 

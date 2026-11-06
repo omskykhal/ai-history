@@ -261,6 +261,50 @@ run('session-start.mjs', k({ source: 'startup' }, kaid, ka), KA);
 const kmix = run('prompt-submit.mjs', k({ prompt: 'kimib 프로젝트 고쳐줘' }, kaid, ka), KA);
 check('언급으로 앵커 변경: 새 폴더 기록만', kmix.stdout.includes('폴더B 표지') && !kmix.stdout.includes('폴더A 표지'), kmix.stdout);
 
+// ---- 요청문 경로 지정: 경계 밖(홈 폴더)에서 켠 세션이 프로젝트를 전체 경로로만 받는 경우
+const outside = path.join(box, 'home');
+fs.mkdirSync(outside, { recursive: true });
+const pa = project('patha', true);
+const pb = project('pathb', true);
+fs.mkdirSync(path.join(pa, 'web', 'src'), { recursive: true });
+fs.writeFileSync(path.join(pa, '.ai-history', 'STATUS.md'), '# STATUS\n세션: a\n\n## 하던 일\n- 경로A 표지\n');
+fs.writeFileSync(path.join(pb, '.ai-history', 'STATUS.md'), '# STATUS\n세션: b\n\n## 하던 일\n- 경로B 표지\n');
+const anchorOfSid = (id) => { try { return JSON.parse(fs.readFileSync(sp(id).json, 'utf-8')).anchor; } catch { return null; } };
+const pid1 = 'dddd1b09-0887-4eff-869f-39f29ebe4d2c';
+run('session-start.mjs', k({ source: 'startup' }, `session_${pid1}`, outside), KA);
+const p1 = run('prompt-submit.mjs', k({ prompt: [{ type: 'text', text: `${pa} 여기가 프로젝트 폴더이고, 표 제목을 바꿔줘."${path.join(outside, '스크린샷 1.png')}"` }] }, `session_${pid1}`, outside), KA);
+check('경로 지정: 폴더 자체 → 앵커·작업자 kimi', anchorOfSid(pid1) === C.normalizeWinPath(pa) && logOf(pa).includes(`[${pid1.slice(0, 8)}][kimi] [User]`) && logOf(pa).includes('[anchor] 지정'), `${anchorOfSid(pid1)} ${logOf(pa)}`);
+check('경로 지정: 이전 기록+지시 전달', p1.stdout.includes('경로A 표지') && p1.stdout.includes('STATUS:BEGIN'), p1.stdout);
+run('post-tool.mjs', k({ tool_name: 'Edit', tool_input: { path: path.join(pa, 'web', 'src', 'a.tsx') } }, `session_${pid1}`, outside), KA);
+check('경로 지정: 뒤이은 도구 기록', logOf(pa).includes('✓ [Edit]'), logOf(pa));
+run('prompt-submit.mjs', k({ prompt: '이어서 통계 화면도 고쳐줘' }, `session_${pid1}`, outside), KA);
+check('경로 지정: 경로 없는 다음 요청도 같은 폴더', logOf(pa).includes('[User] 이어서 통계 화면도 고쳐줘'), logOf(pa));
+run('prompt-submit.mjs', k({ prompt: `${path.join(pb, 'src', 'x.ts')} 참고해서 고쳐줘` }, `session_${pid1}`, outside), KA);
+check('경로 지정: 앵커 있는 세션은 안쪽 경로로 안 바뀜', anchorOfSid(pid1) === C.normalizeWinPath(pa), anchorOfSid(pid1));
+run('prompt-submit.mjs', k({ prompt: `${pb} 여기로 넘어가자` }, `session_${pid1}`, outside), KA);
+check('경로 지정: 폴더 자체는 앵커 변경', anchorOfSid(pid1) === C.normalizeWinPath(pb) && logOf(pb).includes('[anchor] 변경'), `${anchorOfSid(pid1)} ${logOf(pb)}`);
+const pid2 = 'eeee1b09-0887-4eff-869f-39f29ebe4d2c';
+run('prompt-submit.mjs', k({ prompt: `${path.join(pa, 'web', 'src', 'a.tsx')}에서 공급가액을 판매가로 바꿔줘` }, `session_${pid2}`, outside), KA);
+check('경로 지정: 앵커 없는 세션은 안쪽 경로(조사 붙음)도 인정', anchorOfSid(pid2) === C.normalizeWinPath(pa), anchorOfSid(pid2));
+const pid3 = 'ffff1b09-0887-4eff-869f-39f29ebe4d2c';
+const p3 = run('prompt-submit.mjs', k({ prompt: `${path.join(outside, 'a.png')} 이 그림 설명해줘 https://example.com/${path.basename(pa)}` }, `session_${pid3}`, outside), KA);
+check('경로 지정: 경계 밖 경로·URL 은 무시', anchorOfSid(pid3) === null && p3.stdout === '', `${anchorOfSid(pid3)} ${p3.stdout}`);
+const pgrp = project('pgrp', true);
+const psub = project(path.join('pgrp', 'psub'), true);
+const pfolders = C.listCandidateFolders(baseEnv);
+const mp = (text) => { const h = C.matchProjectPath(text, pfolders, baseEnv); return h ? `${h.name}:${h.exact}` : null; };
+check('경로 판정: 폴더 자체·쉼표·따옴표·/ 구분', mp(`${pa}, 여기`) === 'patha:true' && mp(`"${pa}" 여기`) === 'patha:true' && mp(`${pa.replace(/\\/g, '/')} 여기`) === 'patha:true', `${mp(`${pa}, 여기`)} ${mp(`"${pa}" 여기`)} ${mp(`${pa.replace(/\\/g, '/')} 여기`)}`);
+check('경로 판정: 기록 없는 하위 폴더는 기록 있는 상위로', mp(`${path.join(pa, 'web')} 봐줘`) === 'patha:false', mp(`${path.join(pa, 'web')} 봐줘`));
+check('경로 판정: 없는 폴더·코드 펜스·붙여넣기·루트 자체는 null', mp(`${path.join(root, 'nope')} 봐줘`) === null && mp(`봐줘\n\`\`\`\n${pa}\n\`\`\``) === null && mp(`<pasted_content id="x">${pa}</pasted_content> 뭐야`) === null && mp(`${root} 봐줘`) === null,
+  `${mp(`${path.join(root, 'nope')} 봐줘`)} ${mp(`봐줘\n\`\`\`\n${pa}\n\`\`\``)} ${mp(`${root} 봐줘`)}`);
+check('경로 판정: 깊이 2 폴더 뒤 조사 → 그 폴더 자체', mp(`${psub}에서 작업해`) === 'psub:true' && mp(`${pgrp}에서 작업해`) === 'pgrp:true', `${mp(`${psub}에서 작업해`)} ${mp(`${pgrp}에서 작업해`)}`);
+check('경로 판정: 안쪽 경로보다 뒤의 폴더 자체 경로 우선', mp(`${path.join(psub, 'a.ts')} 를 ${pb} 에 복사`) === 'pathb:true', mp(`${path.join(psub, 'a.ts')} 를 ${pb} 에 복사`));
+check('경로 판정: 「경로:」 바로 뒤·중괄호 안', mp(`경로:${pa} 봐줘`) === 'patha:true' && mp(`{${pa}} 봐줘`) === 'patha:true', `${mp(`경로:${pa} 봐줘`)} ${mp(`{${pa}} 봐줘`)}`);
+const cutText = `${'x'.repeat(C.MENTION_SCAN_MAX - psub.length + 1)} ${psub} 봐줘`;
+check('경로 판정: 400자에서 잘린 경로는 버림', mp(cutText) === null, mp(cutText));
+check('경로 판정: 없는 하위 폴더+한글 이름은 상위 폴더 자체로 보지 않음', mp(`${path.join(pgrp, '새폴더')} 봐줘`) === 'pgrp:false', mp(`${path.join(pgrp, '새폴더')} 봐줘`));
+check('경로 판정: 이름 언급 함수는 그대로(경로 안 이름 무시)', C.matchProjectMention(`${pa} 열어줘`, [], pfolders, []) === null);
+
 check('/c/ 절대 경로 트래커 판정(회귀)', C.isTrackerChangeTool({ tool_name: 'Write', cwd: 'C:\\Users\\me', tool_input: { file_path: '/c/Users/me/Desktop/Project/x/a.ts' } }, 'c:\\users\\me\\desktop\\project\\x', baseEnv));
 check('상대 경로 트래커 판정', C.isTrackerChangeTool({ tool_name: 'Write', cwd: 'C:\\Users\\me\\Desktop\\Project\\x', tool_input: { path: 'src/a.ts' } }, 'c:\\users\\me\\desktop\\project\\x', baseEnv));
 

@@ -658,6 +658,49 @@ export function matchProjectMention(prompt0, projects, folders, aliases) {
   return al ? al.hit : fo;
 }
 
+// Absolute path in the prompt → project. Called only when matchProjectMention found no name.
+// A session started outside the root (e.g. in the home folder) that is given its project only as a path used to get no anchor, so nothing was recorded.
+// Sanitized copy: pasted blocks, system lines and everything after them, code fences and URLs removed; first 400 chars only (a token cut by that limit is dropped).
+// Among the paths that are inside the root and belong to a candidate folder: the first one that is a folder itself (exact), else the first inside path.
+// Target: the deepest candidate folder with history that holds the path, else the folder equal to the path, else the depth-1 folder.
+//  (The path of a sub-folder without history goes to its parent project with history, so a folder inside a project does not get its own history.)
+// exact = the path is that folder itself. A path inside a folder (exact=false) is used by the caller only when the session has no anchor yet,
+// so a file path given for reference does not move the anchor.
+const PATH_TOKEN_RE = /(?<![^\s"'`(\[:<{>=])(?:[A-Za-z]:[\\/]|\/)[^\s"'`<>|]+/g;
+export function matchProjectPath(prompt0, folders, env = process.env) {
+  if (typeof prompt0 !== 'string' || !prompt0.trim() || NOISE_RE.test(prompt0) || !Array.isArray(folders)) return null;
+  let s = prompt0.replace(/<pasted_content[\s\S]*?(?:<\/pasted_content>|$)/gi, ' ');
+  const noise = /^[ \t]*<(?:agent-message|task-notification|system)/im.exec(s);
+  if (noise) s = s.slice(0, noise.index);
+  s = s.replace(/```[\s\S]*?(?:```|$)/g, ' ').replace(/https?:\/\/\S+/gi, ' ').replace(/www\.\S+/gi, ' ');
+  if (s.length > MENTION_SCAN_MAX) s = s.slice(0, MENTION_SCAN_MAX).replace(/\S+$/, '');
+  const resolve = (cand) => {
+    if (!cand || !inScope(cand, env)) return null;
+    const n = normalizeWinPath(cand);
+    const holders = folders.filter((f) => f && f.anchor && isUnder(n, f.anchor));
+    if (!holders.length) return null;
+    const rec = holders.filter((f) => f.recorded).sort((a, b) => b.depth - a.depth)[0];
+    const f = rec || holders.find((x) => x.anchor === n) || holders.find((x) => x.depth === 1) || holders[0];
+    return { name: f.name, dir: f.dir, anchor: f.anchor, depth: f.depth, recorded: f.recorded, exact: f.anchor === n };
+  };
+  let inside = null;
+  for (const m of s.matchAll(PATH_TOKEN_RE)) {
+    const tok = m[0].replace(/[.,;:!?)\]}]+$/, '');
+    const a = resolve(tok);
+    if (a && a.exact) return a;
+    const bare = tok.replace(/[가-힣]+$/, ''); // a Korean particle glued to the path; not used when it would remove the whole last segment
+    const b = bare !== tok && !/[\\/]$/.test(bare) ? resolve(bare) : null;
+    if (b && b.exact) return b;
+    if (!inside) inside = a || b;
+  }
+  return inside;
+}
+// Does the session already have an anchor, or get one from its cwd? (for the inside-path rule above)
+export function hasAnchorSource(data, env = process.env) {
+  const st = data ? readState(data.session_id, env) : null;
+  return !!(st && st.anchor && inScope(st.anchor, env)) || !!(data && inScope(data.cwd, env));
+}
+
 // Reader body: STATUS.md (≤4,000 chars) + other sessions' STATUS (last 48h, newest 2, ≤1,000 chars each) + today's tail 40 lines + yesterday's tail 20 lines
 export const READER_TOTAL_MAX = 10000;
 const READER_STATUS_MAX = 4000;

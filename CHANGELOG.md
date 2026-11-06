@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.6.2 — 2026-11-06
+
+A session started outside the root (for example Kimi Code opened in the home folder) that was given its project only as a full path wrote no history at all: paths are removed before the prompt is scanned for a project name, and the working directory was outside the root, so the session never got an anchor. The rule is the same for every agent.
+
+- New path rule in `UserPromptSubmit`, used only when no project name or alias is found: an absolute path inside the root selects its project. The path of a project folder itself counts like its name (and can move the anchor); a path inside a project counts only while the session has no anchor yet, so a file path given for reference does not move the anchor.
+- The project is the deepest folder with history that holds the path, else the folder equal to the path, else the depth-1 folder. So the path of a sub-folder without history goes to its parent project with history.
+- With several paths in one prompt, the first one that is a project folder itself wins over an earlier path inside a project.
+- Paths outside the root, in code fences, URLs and pasted blocks are ignored; only the first 400 characters are scanned and a path cut by that limit is dropped. A trailing comma or a Korean particle glued to the path is dropped. A folder name with spaces must be quoted.
+- Name matching (`<folder> project`, aliases) is unchanged: a name that only appears inside a path is still not a match.
+- Tests: `test/run-agent-tests.mjs` 75 → 92.
+
 ## 0.6.1 — 2026-11-05
 
 Removes the account tool (`tracker-cred.mjs`) and the `items[].check` / `kind: "cmd"` contract added in 0.5.2. That tool read test-account passwords from a project file and sent them to the Firebase Auth REST API, which the plugin directory flags as credential forwarding (MCP_FORWARDS_CREDENTIAL_ENV) and which is a project-specific workflow rather than part of a shared history. Hooks, the installer, `hooks/hooks.json` and the history / STATUS / tracker files are unchanged.

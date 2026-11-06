@@ -5,6 +5,7 @@ import {
   AGENT, historyDirName, lastWorkerLine, t, runRetention, retentionLogLine,
   trackerEligibility, trackerInstruction, trackerDbReadInstruction,
   hasArtifactTools, hasToolContext, emitPromptContext, readPending, writePending, kimiLateCapture,
+  matchProjectPath, hasAnchorSource,
 } from './common.mjs';
 
 runHook(async () => {
@@ -21,7 +22,13 @@ runHook(async () => {
   const interactive = !data.agent_id && isInteractive(data, env);
 
   // Project named in the prompt: interactive main session with a real prompt only
-  const hit = interactive && raw !== undefined ? matchProjectMention(raw, listHistoryProjects(env), listCandidateFolders(env), loadAliases(env)) : null;
+  const folders = interactive && raw !== undefined ? listCandidateFolders(env) : null;
+  let hit = folders ? matchProjectMention(raw, listHistoryProjects(env), folders, loadAliases(env)) : null;
+  // No name in the prompt → look for a project path. The folder itself counts like a name; a path inside it only while the session has no anchor.
+  if (!hit && folders) {
+    const ph = matchProjectPath(raw, folders, env);
+    if (ph && (ph.exact || !hasAnchorSource(data, env))) hit = ph;
+  }
   const r = resolveAnchor(data, env, { allowSwitch: !data.agent_id, mentioned: hit ? hit.dir : null, unrecorded: !!(hit && hit.recorded === false) });
   if (!r) return;
 
