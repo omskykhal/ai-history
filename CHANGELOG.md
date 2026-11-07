@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.6.3 — 2026-11-08
+
+The Anthropic plugin directory rejected 0.6.1 and 0.6.2 with "Hooks of type command accepted only from Verified organizations" (the security scan itself passed). The plugin therefore no longer carries hooks.
+
+- Removed `hooks/hooks.json` (six `command` hooks, `SessionStart` … `SessionEnd`). A marketplace or `--plugin-dir` install now provides only the `/tracker-test` skill and the `tracker-verifier` agent and writes no history.
+- The automatic history is unchanged and comes from the installer: `node install.mjs --install` (Claude Code), `--codex-hooks`, `--grok-hooks`, `--kimi-hooks`, Cursor as in 0.6.0. Hook scripts, `common.mjs`, i18n, tracker files and tests are unchanged; `CLAUDE_PLUGIN_DATA` / `AUTO_HISTORY_*` are still honored when set.
+- README (en / ko): install section and the plugin section rewritten accordingly.
+- Tests: unchanged, 266 + 92 + 23.
+
 ## 0.6.2 — 2026-11-06
 
 A session started outside the root (for example Kimi Code opened in the home folder) that was given its project only as a full path wrote no history at all: paths are removed before the prompt is scanned for a project name, and the working directory was outside the root, so the session never got an anchor. The rule is the same for every agent.

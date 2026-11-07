@@ -1,6 +1,6 @@
 {
   "name": "ai-history",
-  "version": "0.6.2",
+  "version": "0.6.3",
   "description": "One shared, human-readable work history per project for Claude Code, OpenAI Codex, Grok, Kimi and Cursor, written automatically by hooks.",
   "type": "module",
   "private": true,
