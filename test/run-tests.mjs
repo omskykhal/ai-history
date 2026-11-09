@@ -1,5 +1,6 @@
 // auto-history 단위 시험 (플랜 v4.1 §5 1~6행 + 변경 2 §14.4 = 7행, 2c (p)~(v), §15 = 8행, 배포 일반화 = 9행, 보존·다중 세션 = 10행, 재개 명령 = 11행, 트래커 페이지 = 12행). 사용: node run-tests.mjs <scratch-dir> [<설치 전 settings 사본>]
 import fs from 'node:fs';
+import zlib from 'node:zlib';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -2084,6 +2085,34 @@ async function row15() {
     rec(15, '(f) Stop: 추천 절 저장·불완전 아님', 'STATUS1 에 "## 추천\\n- 5e 인터뷰 시작"·두 로그 모두 형식 불완전 없음·둘 다 STATUS 갱신',
       `st1=${/## 추천\n- 5e 인터뷰 시작/.test(st1)} inc1=${/형식 불완전/.test(l1)} inc2=${/형식 불완전/.test(l2)} up=${/STATUS 갱신/.test(l1) && /STATUS 갱신/.test(l2)}`,
       /## 추천\n- 5e 인터뷰 시작/.test(st1) && /## 진행도\n- 4d/.test(st2) && !/형식 불완전/.test(l1) && !/형식 불완전/.test(l2) && /STATUS 갱신/.test(l1) && /STATUS 갱신/.test(l2));
+  }
+  // (h) search.mjs: 로컬 검색(부분 문자열·대소문자 무시·프로젝트 필터·since·archived·regex·limit·json·종료 코드)
+  {
+    const a = P('p15h'); const hd = path.join(a, HD);
+    fs.mkdirSync(path.join(hd, 'archive'), { recursive: true }); fs.mkdirSync(path.join(hd, 'sessions'), { recursive: true });
+    fs.writeFileSync(path.join(hd, 'STATUS.md'), '# STATUS\n세션: abcdef12\n\n## 하던 일\n- 검색어ZQX 상태\n');
+    fs.writeFileSync(path.join(hd, `${today()}.md`), '- 10:00:00 [abcdef12][claude] ▶ [Bash] echo 검색어zqx 오늘\n- 10:00:01 [abcdef12][claude] 다른 줄\n');
+    fs.writeFileSync(path.join(hd, '2025-01-01.md'), '- 09:00:00 [abcdef12][codex] 검색어ZQX 옛날\n');
+    fs.writeFileSync(path.join(hd, 'archive', '2024-12-31.md.gz'), zlib.gzipSync('- 08:00:00 [abcdef12][claude] 검색어ZQX 보관\n'));
+    fs.writeFileSync(path.join(hd, 'sessions', 'claude-abcdef12.md'), '# STATUS\n세션: abcdef12\n\n## 하던 일\n- 검색어ZQX 세션사본\n');
+    const env = baseEnv(sidNew());
+    const r1 = run('search.mjs', '', env, ['검색어zqx', '--project', 'p15h']);
+    const r2 = run('search.mjs', '', env, ['검색어zqx', '--project', 'p15h', '--archived', '--json']);
+    const r3 = run('search.mjs', '', env, ['검색어zqx', '--project', 'p15h', '--since', '1d']);
+    const r4 = run('search.mjs', '', env, ['없는말QQZ', '--project', 'p15h']);
+    const r5 = run('search.mjs', '', env, ['검색어zqx', '--project', 'p15h', '--bogus']);
+    const r6 = run('search.mjs', '', env, ['검색어(zqx|보관)', '--regex', '--project', 'p15h', '--archived', '--limit', '2']);
+    const j2 = (() => { try { return JSON.parse(r2.out); } catch { return null; } })();
+    const count = (o) => (o.match(/^  \S+:\d+  /gm) || []).length;
+    const ok1 = r1.code === 0 && count(r1.out) === 4 && r1.out.includes('STATUS.md:') && r1.out.includes(`${today()}.md:`) && r1.out.includes('2025-01-01.md:') && r1.out.includes('sessions/claude-abcdef12.md:') && !r1.out.includes('archive/');
+    const ok2 = !!j2 && j2.total === 5 && j2.hits.some((h) => h.file.startsWith('archive/')) && j2.projects === 1;
+    const ok3 = r3.code === 0 && count(r3.out) === 3 && !r3.out.includes('2025-01-01');
+    const ok4 = r4.code === 1 && /일치하는 줄 없음|no matching lines/.test(r4.out);
+    const ok5 = r5.code === 2 && r5.out === '';
+    const ok6 = r6.code === 0 && count(r6.out) === 2 && /까지만 표시|showing the first/.test(r6.out);
+    rec(15, '(h) search.mjs 로컬 검색', '기본 4건(보관 제외)·--archived json 5건·--since 1d 3건·없음 exit1·잘못된 옵션 exit2·regex+limit 2건+절단 안내',
+      `r1=${r1.code}/${count(r1.out)} j2=${j2 ? j2.total : 'null'} r3=${r3.code}/${count(r3.out)} r4=${r4.code} r5=${r5.code} r6=${r6.code}/${count(r6.out)}`,
+      ok1 && ok2 && ok3 && ok4 && ok5 && ok6);
   }
   // (g) 기존 1~14행 전부 통과
   {

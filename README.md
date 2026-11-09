@@ -123,6 +123,10 @@ API-key-looking strings (`AIza…`, `sk-…`, `ghp_…`, `Bearer …`, `password
 
 Daily logs are kept as plain `YYYY-MM-DD.md` for 30 days. Older files are gzipped into `.ai-history/archive/YYYY-MM-DD.md.gz` (the original is deleted only after a gunzip round-trip matches) and `.gz` files are deleted once the log date is more than 365 days old **and** the `.gz` itself has existed for at least `archive − keep` days (so nothing is deleted right after being archived; `archive` must be greater than `keep`, or 0). The run happens once per 24 hours per project, at session start or when the anchor changes, and never touches today's or yesterday's log or `STATUS.md`. Change the numbers with the `RETENTION` file or `node install.mjs --config --keep-days 60 --archive-days 0`; `keep=0` turns the whole log rotation off.
 
+### Search (0.9.0)
+
+`node search.mjs <text>` scans the `.ai-history/` folders of the projects under the root line by line (no index, no database, no network): dated logs, `STATUS.md`, `sessions/*.md` and `cursor-import-*.md`, plus `archive/*.md.gz` with `--archived`. Run inside a project folder to search only that project; outside, every project (`--all` forces that); `--project <name>` picks one. `--since 7d` (or `YYYY-MM-DD`) limits the dated logs, `--regex` switches to a regular expression, and `--limit` (default 200) and `--json` are available. Exit code 0 = hits, 1 = none, 2 = usage error. From a plugin install call `node "<plugin folder>/search.mjs" …`. Output lines go through the same masking as the stored files.
+
 ### Tracker page
 
 A per-project checklist page for the things **you** should check by hand (one card per feature: account, menu path, what to do, what "OK" looks like, the AI's own check, and your verdict buttons OK / Problem / Unchecked plus a note).

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.9.0 — 2026-11-10
+
+- **Search.** `node search.mjs <text>` searches the history files of the projects under the root line by line: dated logs, `STATUS.md`, `sessions/*.md`, `cursor-import-*.md`, and `archive/*.md.gz` with `--archived`. Options `--project`, `--all`, `--since <YYYY-MM-DD|<n>d>`, `--regex`, `--limit`, `--json`; inside a project folder only that project is searched. No index, no database; output goes through the same masking as the stored files. Exit code 0 / 1 / 2 (hits / none / usage). The same file runs in the author's local hook set.
+- Tests: row 15 (h), run-tests 277 → 278.
+
 ## 0.8.1 — 2026-11-10
 
 - `추천` / `Suggested` items are now offered as a choice, not just mentioned: in the reply that writes them and after `[Status]` in the next session, the agent asks with AskUserQuestion when available (else a numbered list), one option per item plus a last option 「다른 할 일」 / "Something else", and starts nothing until the user picks. Instruction text only (ko/en); README updated; test row 15 (e) adjusted.
