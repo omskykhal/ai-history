@@ -7,7 +7,7 @@
 Close the laptop mid-task, come back tomorrow, open Claude Code, Codex, Grok, Kimi or Cursor from any folder, say the project's name, and the agent starts with a `[Status]` report of what was being done, how far it got, what is next, and **which agent did it last**.
 
 - Every tool call is appended to `<project>/.ai-history/YYYY-MM-DD.md` as one line: `- HH:mm:ss [session][claude|codex|grok|kimi|cursor] ▶ [Bash] npm test`.
-- At the end of each reply the agent writes a short status block; a hook saves it to `<project>/.ai-history/STATUS.md` (Working on / Done / Next / Progress).
+- At the end of each reply the agent writes a short status block; a hook saves it to `<project>/.ai-history/STATUS.md` (Working on / Done / Next / Progress, optionally Suggested).
 - On session start, and whenever you mention a project by name, the hook injects `STATUS.md` plus the tail of today's and yesterday's log.
 - All of these agents read and write the **same files**, so you can switch between them and keep one timeline.
 - No LLM calls, no database, no cloud. Plain Markdown in the project folder, written by small Node scripts.
@@ -72,7 +72,7 @@ Project folders keep their `.ai-history/` folders; delete them yourself if you n
 
 Only folders **inside your root** (`--root`) get a `.ai-history/`. Nothing is ever written in your home folder or a temp folder. For each session the anchor is decided in this order:
 
-1. A project named in your prompt: an alias from `ALIASES`, or `<folder name> project` / `project <folder name>` (`folder` also works for depth-1 folders). The folder must be at depth 1 or 2 under the root. When no name is found, an absolute path in the prompt is used instead: the path of a project folder itself counts like its name (`C:\Projects\MyApp is the project folder, fix …`), and a path inside a project counts only while the session has no anchor yet. Quote a path whose folder name has spaces.
+1. A project named in your prompt: an alias from `ALIASES`, or `<folder name> project` / `project <folder name>` (`folder` also works for depth-1 folders); `project called <name>` / `folder named <name>` work too, and in Korean one of `라는`·`이라는`·`란`·`이란` may sit between the name and the keyword. The folder must be at depth 1 or 2 under the root. When no name is found, an absolute path in the prompt is used instead: the path of a project folder itself counts like its name (`C:\Projects\MyApp is the project folder, fix …`), and a path inside a project counts only while the session has no anchor yet. Quote a path whose folder name has spaces.
 2. The working directory, when it really changed since the last prompt and is inside the root (a sub-folder of the current anchor keeps the anchor).
 3. The anchor already recorded for this session.
 4. No anchor yet and the working directory is inside the root → adopt it.
@@ -93,8 +93,12 @@ After any reply in which the agent used a tool, it is instructed to end with:
 - ...
 ## Progress
 - ...
+## Suggested
+- ...
 <!-- STATUS:END -->
 ```
+
+`Suggested` is optional: 0-3 lines on what would be good to do next given the context. The agent writes it down and does not act on anything it was not asked to do. When the next session opens, the agent presents those items in one line at the end of `[Status]` and asks whether to proceed (it does not start them itself). A block without this section still counts as complete.
 
 The `Stop` hook extracts it and writes `STATUS.md` with a header (`Session`, `Author: <agent> (<id>)`, `Updated`, `Anchor`, `Resume: claude --resume <id>` or `Resume: codex resume <id>`). When the session ends (`/exit`, `/clear`, logout), the `SessionEnd` hook logs `[exit] session end(reason=prompt_input_exit) resume: claude --resume <id>` and adds the `Resume` line to this session's `STATUS.md` / `sessions/` copy if it is missing, so the command to continue the session stays in the history. If the block is missing, the hook asks **once** for it (`decision: block`), never when the stop was caused by a context limit, an interruption, an auth error, a scheduled wake-up, or when context is ≥95% full. Disable the nudge with a `NO_BLOCK` file (Claude) / `NO_BLOCK_CODEX` file (Codex) in the conf dir, or `AUTO_HISTORY_NO_BLOCK=1`.
 

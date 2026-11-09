@@ -1679,6 +1679,8 @@ async function main() {
   await row12();
   // ---------- 13행 MD 점검표·MD 탭·결과 회수·tracker-test 규칙(0.5.0) ----------
   await row13();
+  // ---------- 14행 0.8.0 연결어·추천 절 ----------
+  await row14();
 
   // ---------- 결과 ----------
   const esc = (s) => String(s).replace(/\|/g, '\\|').replace(/\r?\n/g, '⏎');
@@ -2019,6 +2021,75 @@ async function row12() {
 }
 
 // ---------- 13행: MD 점검표·MD 탭·결과 회수(①블록 by ②md 결과 ③inbox parse)·tracker-test 규칙 ----------
+// ---------- 14행 0.8.0: 이름 연결어("라는"/"called")·STATUS 선택 절 「추천」 ----------
+async function row14() {
+  const KO = { AUTO_HISTORY_LANG: 'ko' };
+  const EN = { AUTO_HISTORY_LANG: 'en' };
+  const folders = [{ name: 'ai-test', depth: 1 }, { name: 'MyMemo', depth: 1 }, { name: 'policy', depth: 1 }, { name: 'sub', depth: 2 }];
+  const m = (s) => { const h = C.matchProjectMention(s, [], folders, []); return h ? h.name : null; };
+  // (a) 한국어 연결어: <이름> (이)라는|(이)란 프로젝트|폴더
+  {
+    const got = [m('ai-test 라는 프로젝트 시작하자'), m('ai-test라는 프로젝트'), m('MyMemo 이라는 폴더'), m('MyMemo 란 프로젝트'), m('MyMemo이란 프로젝트'), m('sub 라는 프로젝트')].map(String);
+    const want = ['ai-test', 'ai-test', 'MyMemo', 'MyMemo', 'MyMemo', 'sub'];
+    rec(14, '(a) 연결어 라는/이라는/란/이란', want.join(','), got.join(','), got.join(',') === want.join(','));
+  }
+  // (b) 영어 연결어: project|folder called|named <name>
+  {
+    const got = [m('project called ai-test'), m('the project named MyMemo'), m('folder called policy'), m('project calledai-test')].map(String);
+    const want = ['ai-test', 'MyMemo', 'policy', 'null'];
+    rec(14, '(b) 연결어 called/named', want.join(','), got.join(','), got.join(',') === want.join(','));
+  }
+  // (c) 연결어가 경계·다른 말을 허용하지 않음
+  {
+    const got = [m('policyholder 라는 프로젝트'), m('ai-test 에 관한 프로젝트'), m('ai-test 라는 폴더가 아니라'), m('sub 라는 폴더')].map(String);
+    const want = ['null', 'null', 'ai-test', 'null'];
+    rec(14, '(c) 연결어 경계: 부분어·다른 조사·깊이2 폴더 키워드 제외', want.join(','), got.join(','), got.join(',') === want.join(','));
+  }
+  // (d) STATUS 형식: 5번째 절 추천/Suggested, 4절 블록은 누락 아님
+  {
+    const fk = C.statusFormatFor(KO); const fe = C.statusFormatFor(EN);
+    const okK = /## 진행도\n- \(1~5줄\)\n## 추천\n- \(0~3줄/.test(fk) && fk.endsWith('<!-- STATUS:END -->');
+    const okE = /## Progress\n- \(1-5 lines\)\n## Suggested\n- \(0-3 lines/.test(fe) && fe.endsWith('<!-- STATUS:END -->');
+    const m4k = C.missingHeadings('## 하던 일\n- a\n## 한 일\n- b\n## 다음 할 일\n- c\n## 진행도\n- d', KO);
+    const m5k = C.missingHeadings('## 하던 일\n- a\n## 한 일\n- b\n## 다음 할 일\n- c\n## 진행도\n- d\n## 추천\n- e', KO);
+    const m4e = C.missingHeadings('## Working on\n- a\n## Done\n- b\n## Next\n- c\n## Progress\n- d', EN);
+    const mX = C.missingHeadings('## 하던 일\n- a\n## 추천\n- e', KO);
+    rec(14, '(d) 추천/Suggested 절·누락 판정', 'ko/en 형식에 5번째 절·4절·5절 블록 누락 [] · 추천만 있는 블록은 3개 누락',
+      `fk=${okK} fe=${okE} m4k=${JSON.stringify(m4k)} m5k=${JSON.stringify(m5k)} m4e=${JSON.stringify(m4e)} mX=${mX.length}`,
+      okK && okE && m4k.length === 0 && m5k.length === 0 && m4e.length === 0 && mX.length === 3 && !mX.includes('추천'));
+  }
+  // (e) 지시문: 추천 절 작성 규칙(적기만, 실행 금지)·세션 시작 때 제시 후 질문
+  {
+    const I = await import('../i18n.mjs'); const tk = I.T('ko'); const te = I.T('en');
+    const pk = tk.promptInstruction('.ai-history', C.statusFormatFor(KO)); const pe = te.promptInstruction('.ai-history', C.statusFormatFor(EN));
+    const ok = /`추천` 절에는 문맥 흐름상 다음에 하면 좋은 일을 0~3줄로 적되, 지시받지 않은 일은 적기만 하고 실행하지 마라/.test(pk)
+      && /STATUS 에 `추천` 절이 있으면 `\[현황\]` 마지막 줄에 그 항목을 한 줄로 제시하고 진행할지 물어라\(스스로 시작하지 마라\)/.test(tk.sessionInstruction)
+      && /`추천` 절이 있으면 `\[현황\]` 마지막 줄에 한 줄로 제시하고 진행할지 물어라/.test(tk.mentionRecorded('X', 'C:\\x'))
+      && /Under `Suggested`, write 0-3 lines/.test(pe) && /do not act on anything you were not asked to do/.test(pe)
+      && /If STATUS has a `Suggested` section, present its items in one line at the end of `\[Status\]` and ask whether to proceed \(do not start them yourself\)/.test(te.sessionInstruction)
+      && /`Suggested` section, present it in one line at the end of `\[Status\]` and ask whether to proceed/.test(te.mentionRecorded('X', 'C:\\x'));
+    rec(14, '(e) 추천 지시문 ko/en', 'prompt·session·mention 지시문 3종에 추천/Suggested 규칙', `ok=${ok}`, ok);
+  }
+  // (f) Stop 통합: 5절 블록 → STATUS.md 에 추천 저장·형식 불완전 로그 없음 / 4절 블록도 불완전 아님
+  {
+    const stop = (sid, a, extra = {}) => run('stop.mjs', { session_id: sid, cwd: a, transcript_path: '', stop_hook_active: false, ...extra }, baseEnv(sid));
+    const five = ['<!-- STATUS:BEGIN -->', '## 하던 일', '- 5a', '## 한 일', '- 5b', '## 다음 할 일', '- 5c', '## 진행도', '- 5d', '## 추천', '- 5e 인터뷰 시작', '<!-- STATUS:END -->'].join('\n');
+    const four = ['<!-- STATUS:BEGIN -->', '## 하던 일', '- 4a', '## 한 일', '- 4b', '## 다음 할 일', '- 4c', '## 진행도', '- 4d', '<!-- STATUS:END -->'].join('\n');
+    const a1 = P('p14f1'); const s1 = startSession(a1); arm(s1); stop(s1, a1, { last_assistant_message: `완료.\n${five}` });
+    const a2 = P('p14f2'); const s2 = startSession(a2); arm(s2); stop(s2, a2, { last_assistant_message: `완료.\n${four}` });
+    const st1 = statusOf(a1) || ''; const st2 = statusOf(a2) || '';
+    const l1 = logOf(a1); const l2 = logOf(a2);
+    rec(14, '(f) Stop: 추천 절 저장·불완전 아님', 'STATUS1 에 "## 추천\\n- 5e 인터뷰 시작"·두 로그 모두 형식 불완전 없음·둘 다 STATUS 갱신',
+      `st1=${/## 추천\n- 5e 인터뷰 시작/.test(st1)} inc1=${/형식 불완전/.test(l1)} inc2=${/형식 불완전/.test(l2)} up=${/STATUS 갱신/.test(l1) && /STATUS 갱신/.test(l2)}`,
+      /## 추천\n- 5e 인터뷰 시작/.test(st1) && /## 진행도\n- 4d/.test(st2) && !/형식 불완전/.test(l1) && !/형식 불완전/.test(l2) && /STATUS 갱신/.test(l1) && /STATUS 갱신/.test(l2));
+  }
+  // (g) 기존 1~13행 전부 통과
+  {
+    const prior = results.filter((x) => x.row <= 13);
+    rec(14, '(g) 기존 1~13행 전부 통과', `${prior.length}/${prior.length} PASS`, `${prior.filter((x) => x.pass).length}/${prior.length}`, prior.every((x) => x.pass));
+  }
+}
+
 async function row13() {
   const B = await import('../tracker-build.mjs');
   const M = await import('../tracker-md.mjs');

@@ -6,7 +6,7 @@ import path from 'node:path';
 import zlib from 'node:zlib';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { getLang, T, statusFormat, ALL_HEADINGS, AUTHOR_KEYS, UPDATED_KEYS, SESSION_KEYS, RESUME_KEYS, ANCHOR_KEYS, KW_PROJECT, KW_FOLDER } from './i18n.mjs';
+import { getLang, T, statusFormat, ALL_HEADINGS, AUTHOR_KEYS, UPDATED_KEYS, SESSION_KEYS, RESUME_KEYS, ANCHOR_KEYS, KW_PROJECT, KW_FOLDER, KW_LINK_AFTER_NAME, KW_LINK_AFTER_KW } from './i18n.mjs';
 
 export const HOOK_DIR = path.dirname(fileURLToPath(import.meta.url));
 export const IS_WIN = process.platform === 'win32';
@@ -616,6 +616,9 @@ function matchAlias(prompt, aliases) {
 const kwAlt = (words) => words.map((w) => (HANGUL_RE.test(w) ? escRe(w) : `(?<![A-Za-z])${escRe(w)}(?![A-Za-z])`)).join('|');
 const KW_P = `(?:${kwAlt(KW_PROJECT)})`;
 const KW_PF = `(?:${kwAlt([...KW_PROJECT, ...KW_FOLDER])})`;
+// "<name> 라는 프로젝트" / "project called <name>": one optional link word between the name and the keyword.
+const LINK_AFTER_NAME = `(?:\\s*(?:${KW_LINK_AFTER_NAME.map(escRe).join('|')}))?`;
+const LINK_AFTER_KW = `(?:\\s+(?:${KW_LINK_AFTER_KW.map(escRe).join('|')}))?`;
 function matchFolder(prompt, folders) {
   const sorted = folders.filter((p) => p && typeof p.name === 'string' && p.name.trim())
     .slice().sort((a, b) => b.name.length - a.name.length);
@@ -625,8 +628,8 @@ function matchFolder(prompt, folders) {
     const n = escRe(p.name);
     const pre = hangul ? '' : '(?<![A-Za-z0-9])';
     const post = hangul ? '' : '(?![A-Za-z0-9])';
-    if (new RegExp(`${pre}${n}${post}\\s*${kw}`, 'i').test(prompt)
-      || new RegExp(`${kw}\\s*${pre}${n}${post}`, 'i').test(prompt)) return p;
+    if (new RegExp(`${pre}${n}${post}${LINK_AFTER_NAME}\\s*${kw}`, 'i').test(prompt)
+      || new RegExp(`${kw}${LINK_AFTER_KW}\\s*${pre}${n}${post}`, 'i').test(prompt)) return p;
   }
   return null;
 }

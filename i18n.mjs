@@ -9,7 +9,9 @@ export const DEFAULT_LANG = 'en';
 const STR = {
   ko: {
     headings: ['하던 일', '한 일', '다음 할 일', '진행도'],
+    optionalHeadings: ['추천'],
     lines: '(1~5줄)',
+    optionalLines: '(0~3줄, 문맥상 다음에 하면 좋은 일·권할 만한 일. 적기만 하고 실행하지 않는다)',
     statusHead: { session: '세션', author: '작성', updated: '갱신', anchor: '앵커', resume: '재개' },
     lastWorker: (agent, t) => `마지막 작업자: ${agent}${t ? ` · 갱신 ${t}` : ''}`,
     readerStatus: '=== STATUS.md ===',
@@ -23,15 +25,18 @@ const STR = {
     sessionInstruction: '첫 답변의 첫 줄을 `[현황]`으로 시작해 하던 일·어디까지 했는지·다음 할 일을 3~8줄로 보고하라. '
       + '`마지막 작업자` 줄이 있으면 `[현황]` 첫 줄에 마지막 작업자와 시각을 포함하라. '
       + '사용자의 첫 메시지에 구체적 지시가 있으면 보고 뒤에 그 지시를 수행하고, 인사나 빈 요청이면 보고 후 대기하라. '
-      + '이전에 하던 미완료 작업은 사용자 지시 없이 재개하지 마라.',
+      + '이전에 하던 미완료 작업은 사용자 지시 없이 재개하지 마라. '
+      + 'STATUS 에 `추천` 절이 있으면 `[현황]` 마지막 줄에 그 항목을 한 줄로 제시하고 진행할지 물어라(스스로 시작하지 마라).',
     promptInstruction: (dirname, fmt) => '[auto-history] 도구를 1건 이상 사용한 응답은 **맨 끝**에 아래 블록을 그대로 출력하라'
       + `(대화만 한 짧은 턴은 생략 가능). 블록은 훅이 \`${dirname}/STATUS.md\`로 저장한다. `
-      + '블록 본문에 추측성 표현을 쓰지 말고 확인된 사실만 적어라. 각 제목 아래 1~5줄, 한국어.\n' + fmt,
+      + '블록 본문에 추측성 표현을 쓰지 말고 확인된 사실만 적어라. 각 제목 아래 1~5줄, 한국어. '
+      + '`추천` 절에는 문맥 흐름상 다음에 하면 좋은 일을 0~3줄로 적되, 지시받지 않은 일은 적기만 하고 실행하지 마라.\n' + fmt,
     mentionUnrecorded: (name, dir) => `[auto-history] 요청에 언급된 프로젝트 \`${name}\`(\`${dir}\`)에는 아직 기록이 없다. 이 프로젝트 작업은 \`${dir}\` 기준으로 하라. `
       + "첫 줄을 `[현황]`으로 시작해 '이 프로젝트의 기록은 아직 없음(새로 시작)'을 한 줄로 알린 뒤 이번 요청을 수행하라.",
     mentionRecorded: (name, dir) => `[auto-history] 요청에 언급된 프로젝트 \`${name}\`(\`${dir}\`)의 최근 기록이다. `
       + '첫 줄 `[현황]`으로 3~8줄 보고 후 이번 요청을 수행하라. `마지막 작업자` 줄이 있으면 `[현황]` 첫 줄에 마지막 작업자와 시각을 포함하라. '
-      + `이 프로젝트 작업은 \`${dir}\` 기준으로 하라. 미완료 작업은 지시 없이 재개하지 마라.`,
+      + `이 프로젝트 작업은 \`${dir}\` 기준으로 하라. 미완료 작업은 지시 없이 재개하지 마라. `
+      + 'STATUS 에 `추천` 절이 있으면 `[현황]` 마지막 줄에 한 줄로 제시하고 진행할지 물어라.',
     blockReason: (fmt) => `[auto-history] 이번 응답에 상태 블록이 없습니다. 아래 형식의 블록만 출력하고 종료하세요:\n${fmt}`,
     sessionStatusReminder: (fmt) => `[auto-history] 도구를 1건 이상 사용한 응답은 맨 끝에 아래 블록을 그대로 출력하라. 각 제목 아래 1~5줄, 한국어, 확인된 사실만.\n${fmt}`,
     readerDelivered: '이 기록을 방금 전달받았다. 위 지시대로 `[현황]`을 보고하라.',
@@ -153,7 +158,9 @@ const STR = {
   },
   en: {
     headings: ['Working on', 'Done', 'Next', 'Progress'],
+    optionalHeadings: ['Suggested'],
     lines: '(1-5 lines)',
+    optionalLines: '(0-3 lines: what would be good to do next given the context; write it down, do not act on it)',
     statusHead: { session: 'Session', author: 'Author', updated: 'Updated', anchor: 'Anchor', resume: 'Resume' },
     lastWorker: (agent, t) => `Last worker: ${agent}${t ? ` · updated ${t}` : ''}`,
     readerStatus: '=== STATUS.md ===',
@@ -167,15 +174,18 @@ const STR = {
     sessionInstruction: 'Start the first line of your first reply with `[Status]` and report in 3-8 lines what was being worked on, how far it got, and what is next. '
       + 'If a `Last worker` line is present, include the last worker and time in the first `[Status]` line. '
       + "If the user's first message contains a concrete instruction, carry it out after the report; if it is a greeting or empty, wait after the report. "
-      + 'Do not resume unfinished work without an explicit instruction from the user.',
+      + 'Do not resume unfinished work without an explicit instruction from the user. '
+      + 'If STATUS has a `Suggested` section, present its items in one line at the end of `[Status]` and ask whether to proceed (do not start them yourself).',
     promptInstruction: (dirname, fmt) => '[auto-history] Any reply in which you used at least one tool must END with the block below, verbatim '
       + `(a short conversation-only turn may omit it). A hook saves the block to \`${dirname}/STATUS.md\`. `
-      + 'Write only verified facts, no speculation. 1-5 lines under each heading.\n' + fmt,
+      + 'Write only verified facts, no speculation. 1-5 lines under each heading. '
+      + 'Under `Suggested`, write 0-3 lines on what would be good to do next given the context; write it down, do not act on anything you were not asked to do.\n' + fmt,
     mentionUnrecorded: (name, dir) => `[auto-history] The project \`${name}\` (\`${dir}\`) mentioned in the request has no history yet. Work on this project relative to \`${dir}\`. `
       + "Start with a `[Status]` line saying 'no history for this project yet (starting fresh)', then carry out the request.",
     mentionRecorded: (name, dir) => `[auto-history] Recent history of the project \`${name}\` (\`${dir}\`) mentioned in the request. `
       + 'Start with `[Status]` and report in 3-8 lines, then carry out the request. If a `Last worker` line is present, include the last worker and time in the first `[Status]` line. '
-      + `Work on this project relative to \`${dir}\`. Do not resume unfinished work without an instruction.`,
+      + `Work on this project relative to \`${dir}\`. Do not resume unfinished work without an instruction. `
+      + 'If STATUS has a `Suggested` section, present it in one line at the end of `[Status]` and ask whether to proceed.',
     blockReason: (fmt) => `[auto-history] This reply has no status block. Output only a block in the format below and stop:\n${fmt}`,
     sessionStatusReminder: (fmt) => `[auto-history] Any reply in which you used at least one tool must END with the block below, verbatim. 1-5 lines under each heading, verified facts only.\n${fmt}`,
     readerDelivered: 'You just received this record. Report `[Status]` as instructed above.',
@@ -315,11 +325,14 @@ export function T(lang) { return STR[LANGS.includes(lang) ? lang : DEFAULT_LANG]
 
 export function statusFormat(lang) {
   const t = T(lang);
-  return ['<!-- STATUS:BEGIN -->', ...t.headings.flatMap((h) => [`## ${h}`, `- ${t.lines}`]), '<!-- STATUS:END -->'].join('\n');
+  return ['<!-- STATUS:BEGIN -->', ...t.headings.flatMap((h) => [`## ${h}`, `- ${t.lines}`]),
+    ...t.optionalHeadings.flatMap((h) => [`## ${h}`, `- ${t.optionalLines}`]), '<!-- STATUS:END -->'].join('\n');
 }
 
-// Headings of every language (used to judge "incomplete" leniently: a block is complete if all 4 headings of ANY one language are present).
+// Headings of every language (used to judge "incomplete" leniently: a block is complete if all 4 required headings of ANY one language are present).
+// The optional heading (ko 추천 / en Suggested) is part of the template and the instruction but never counts as missing.
 export const ALL_HEADINGS = LANGS.map((l) => STR[l].headings);
+export const OPTIONAL_HEADINGS = LANGS.map((l) => STR[l].optionalHeadings);
 // STATUS header keys of every language (parsed regardless of the active language).
 export const AUTHOR_KEYS = LANGS.map((l) => STR[l].statusHead.author);
 export const UPDATED_KEYS = LANGS.map((l) => STR[l].statusHead.updated);
@@ -329,3 +342,6 @@ export const ANCHOR_KEYS = LANGS.map((l) => STR[l].statusHead.anchor);
 // Folder-mention keywords (always accepted in every language): "<name> project|folder" / "project|folder <name>".
 export const KW_PROJECT = ['프로젝트', 'project'];
 export const KW_FOLDER = ['폴더', 'folder'];
+// Link words allowed between the name and the keyword: "<name> 라는 프로젝트" (ko, after the name) / "project called <name>" (en, after the keyword).
+export const KW_LINK_AFTER_NAME = ['이라는', '라는', '이란', '란'];
+export const KW_LINK_AFTER_KW = ['called', 'named'];
