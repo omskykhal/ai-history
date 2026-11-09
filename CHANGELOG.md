@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.7.0 — 2026-11-09
+
+The plugin carries its hooks again and is distributed only through this repository's own marketplace.
+
+- Restored `hooks/hooks.json` (the six `command` hooks of 0.6.2, unchanged). `/plugin install ai-history --marketplace omskykhal/ai-history` or `claude --plugin-dir` registers the hooks, the `/tracker-test` skill and the `tracker-verifier` agent, so a plugin install writes the history again. Do not combine it with `install.mjs --install` on the same machine (double logging).
+- The Anthropic plugin directory listing is not pursued: after 0.6.3 (hooks removed) the directory also rejected the script files themselves ("scripts, programs, and files outside the allowed types only from Verified organizations"), which rules out the hook scripts and the installer. Apart from the hooks file, the version and the README, the code is the same as 0.6.3.
+- README (en / ko): install section and the plugin section rewritten.
+- Tests: unchanged, 266 + 92 + 23.
+
 ## 0.6.3 — 2026-11-08
 
 The Anthropic plugin directory rejected 0.6.1 and 0.6.2 with "Hooks of type command accepted only from Verified organizations" (the security scan itself passed). The plugin therefore no longer carries hooks.

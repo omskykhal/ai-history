@@ -24,13 +24,13 @@ Close the laptop mid-task, come back tomorrow, open Claude Code, Codex, Grok, Ki
 
 ## Install
 
-**Claude Code plugin (one line, Claude Code 2.1.275+)** — installs only the `/tracker-test` skill and the `tracker-verifier` agent. Since 0.6.3 the plugin carries no hooks (the Anthropic plugin directory accepts hooks of type `command` only from verified organizations), so a plugin install writes **no history** by itself; the automatic history comes from the installer script below. See [Claude Code plugin](#claude-code-plugin-skill-and-agent-only).
+**Claude Code plugin (one line, Claude Code 2.1.275+)** — installs the six hooks, the `/tracker-test` skill and the `tracker-verifier` agent from this repository's own marketplace. The plugin is not listed in the Anthropic plugin directory (it accepts hooks of type `command` and script files only from verified organizations), so the `--marketplace omskykhal/ai-history` part is required. In plugin mode set `AUTO_HISTORY_ROOT` (and optionally `AUTO_HISTORY_LANG`) as environment variables; see [Claude Code plugin](#claude-code-plugin).
 
 ```
 /plugin install ai-history --marketplace omskykhal/ai-history
 ```
 
-**Installer script (required for the history, covers Claude Code and Codex)**
+**Installer script (Claude Code without the plugin, plus Codex, Grok and Kimi)**
 
 Get the files once: clone this repository (or download a release archive from the GitHub Releases page and unpack it) and open a terminal in that folder. Everything below runs from the files you now have on disk; nothing is fetched at install time.
 
@@ -211,11 +211,11 @@ The history files, the STATUS block, the one-time nudge, the resume command and 
 
 Status: logging, agent labels and input fields were checked with one real `grok -p` and `kimi -p` run on Windows, and Cursor logging in one real project. Whether the model acts on the injected text in a stand-alone interactive Grok or Kimi session, and Cursor's follow-up message, have not been observed yet.
 
-## Claude Code plugin (skill and agent only)
+## Claude Code plugin
 
-The repo carries `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json`, so `/plugin install ai-history --marketplace omskykhal/ai-history` (or `claude --plugin-dir ./ai-history`) installs the `/tracker-test` skill and the `tracker-verifier` agent. Up to 0.6.2 the plugin also shipped `hooks/hooks.json` with the six hooks; the Anthropic plugin directory accepts hooks of type `command` only from verified organizations, so 0.6.3 removed that file. A plugin install therefore writes no history: run `node install.mjs --install` (plus `--codex-hooks`, `--grok-hooks`, `--kimi-hooks` as needed) from a clone to register the hooks. The plugin and the installer can be used together; the skill uses the `tracker-md.mjs` path that the hook puts into the tracker instruction, so it does not depend on `${CLAUDE_PLUGIN_ROOT}`.
+The repo carries `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json` and `hooks/hooks.json`, so `/plugin install ai-history --marketplace omskykhal/ai-history` (or `claude --plugin-dir ./ai-history`) installs the six hooks (`SessionStart` … `SessionEnd`), the `/tracker-test` skill and the `tracker-verifier` agent. In plugin mode the conf dir is `CLAUDE_PLUGIN_DATA`, so set `AUTO_HISTORY_ROOT` (and optionally `AUTO_HISTORY_LANG`) as environment variables instead of the `ROOT`/`LANG` files. Codex, Grok and Kimi still need `install.mjs --codex-hooks` / `--grok-hooks` / `--kimi-hooks` from a clone. Do not combine the plugin with `install.mjs --install` on the same machine: both sets of hooks would run and every log line would be written twice. The skill uses the `tracker-md.mjs` path that the hook puts into the tracker instruction, so it does not depend on `${CLAUDE_PLUGIN_ROOT}`.
 
-Earlier plugin-mode notes (0.6.2 and before): hooks loaded through the plugin were verified once on Windows with `claude --plugin-dir` (2026-10-12). The code still honors `CLAUDE_PLUGIN_DATA` as conf dir and `AUTO_HISTORY_ROOT` / `AUTO_HISTORY_LANG` from the environment when set, but nothing in the plugin registers the hooks any more.
+Distribution: this repository is its own marketplace. 0.6.3 had removed the hooks to meet the Anthropic plugin directory policy (hooks of type `command` only from verified organizations); the directory then also rejected the script files themselves, so 0.7.0 restores the hooks and the directory listing is not pursued. Hooks loaded through the plugin were verified once on Windows with `claude --plugin-dir` (2026-10-12); the marketplace install uses the same loading path but was not tested separately.
 
 ## Tests
 
