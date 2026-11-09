@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.10.2 — 2026-11-10
+
+- Tests only, second Linux pass (Linux after 0.10.1: run-tests 259/279, agent 92/92, cursor 22/23). Fixtures that still assumed `\` or a drive letter: the Edit path in row 4, the alias table (`teacher\tauko` → `teacher/tauko`; the parser accepts both separators), the `--migrate-dirname` expectations, the Codex `hooks.json` command regex (`/` or `X:/`), and the Cursor workspace-root URI (POSIX roots are plain paths, no leading extra `/`). Hook code unchanged.
+
 ## 0.10.1 — 2026-11-10
 
 - Tests only: the suites pass on Linux as well. Cases whose expectations were Windows paths (boundary cases in row 1, the case-insensitive cwd, the path-in-prompt case, the checklist anchors, the tracker change detection, the Cursor slug, the Grok anchor suffix) now have POSIX twins chosen by `process.platform`. Hook code unchanged. Linux: plugin install, the six hooks and a `claude -p` e2e run were verified on 2026-11-10; the suite there was 250/279, 89/92, 21/23 before this change.

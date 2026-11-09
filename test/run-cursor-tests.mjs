@@ -22,7 +22,9 @@ let pass = 0, fail = 0;
 const check = (name, ok, actual = '') => { if (ok) pass += 1; else { fail += 1; console.log(`FAIL ${name} ${String(actual).slice(0, 300)}`); } };
 const run = (script, input, raw = false) => spawnSync(process.execPath, [path.join(HOOK, script)], { input: raw ? input : JSON.stringify(input), env, encoding: raw ? undefined : 'utf8' });
 
-const rootUri = `/${proj.replace(/\\/g, '/').replace(/^([A-Z]):/, (m, c) => `${c.toLowerCase()}:`)}`;
+// Cursor hands the workspace root as a URI path: '/c:/Users/...' on Windows, a plain '/tmp/...' on POSIX (no extra slash).
+const toCursorRoot = (p) => (process.platform === 'win32' ? `/${p.replace(/\\/g, '/').replace(/^([A-Z]):/, (m, c) => `${c.toLowerCase()}:`)}` : p);
+const rootUri = toCursorRoot(proj);
 const base = (sid, over = {}) => ({ session_id: sid, conversation_id: sid, cursor_version: '3.20.21', workspace_roots: [rootUri], transcript_path: null, ...over });
 const logText = () => { const d = path.join(proj, '.ai-history'); return fs.existsSync(d) ? fs.readdirSync(d).filter((f) => /^\d{4}-\d{2}-\d{2}\.md$/.test(f)).map((f) => fs.readFileSync(path.join(d, f), 'utf-8')).join('') : ''; };
 
@@ -79,7 +81,7 @@ check('파싱 실패 기록·본문 없음', errs.includes('pre-tool.mjs parse l
 // 경계 밖 프로젝트는 쓰지 않음
 const out = path.join(box, 'outside');
 fs.mkdirSync(out);
-run('prompt-submit.mjs', base('f30e6b94-aaaa-4000-8000-000000000004', { prompt: 'x', workspace_roots: [`/${out.replace(/\\/g, '/').replace(/^([A-Z]):/, (m, c) => `${c.toLowerCase()}:`)}`] }));
+run('prompt-submit.mjs', base('f30e6b94-aaaa-4000-8000-000000000004', { prompt: 'x', workspace_roots: [toCursorRoot(out)] }));
 check('경계 밖 무기록', !fs.existsSync(path.join(out, '.ai-history')));
 
 // Claude·Codex 입력은 기존 동작

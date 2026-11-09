@@ -33,11 +33,11 @@ const ROOT3 = path.join(TEST_ROOT, 'c2root', 'r3');
 // 변경 2d 시험용 별칭표(실제 ALIASES 는 읽지 않음). ghost 줄=없는 경로, 화살표 없는 줄=오류 줄
 const ALIAS_TEXT = [
   '# 시험용 별칭표',
-  'tauko|타우코|school|스쿨|academy|아카데미|play|플레이 => teacher\\tauko',
-  'tauko thinking|tauko-thinking|thinking|씽킹 => teacher\\tauko-thinking',
-  'landing|tauko-landing|랜딩 => teacher\\tauko-landing',
+  'tauko|타우코|school|스쿨|academy|아카데미|play|플레이 => teacher/tauko',
+  'tauko thinking|tauko-thinking|thinking|씽킹 => teacher/tauko-thinking',
+  'landing|tauko-landing|랜딩 => teacher/tauko-landing',
   'auto-history|auto history|오토히스토리 => auto-history',
-  'ghostword|유령 => teacher\\no-such-folder',
+  'ghostword|유령 => teacher/no-such-folder',
   '이 줄은 화살표가 없다',
   '',
 ].join('\n');
@@ -327,7 +327,7 @@ async function main() {
     run('pre-tool.mjs', { session_id: sid, cwd: a, tool_name: 'Bash', tool_input: { command: 'npm run build' } }, baseEnv(sid));
     let ll = lastLine(logOf(a));
     rec(4, 'Pre Bash', '/▶ \\[Bash\\] npm run build$/', ll, /▶ \[Bash\] npm run build$/.test(ll));
-    run('pre-tool.mjs', { session_id: sid, cwd: a, tool_name: 'Edit', tool_input: { file_path: `${TEST_ROOT}\\a.ts` } }, baseEnv(sid));
+    run('pre-tool.mjs', { session_id: sid, cwd: a, tool_name: 'Edit', tool_input: { file_path: path.join(TEST_ROOT, 'a.ts') } }, baseEnv(sid));
     ll = lastLine(logOf(a));
     const wantEdit = `[Edit] ${C.normalizeWinPath(path.join(TEST_ROOT, 'a.ts'))}`;
     rec(4, 'Pre Edit', `...${wantEdit}`, ll, ll.endsWith(wantEdit));
@@ -1061,10 +1061,10 @@ async function main() {
       const rel = (arr) => (arr || []).map((d) => path.relative(RM, d)).sort().join(',');
       const ex = (r, dn) => fs.existsSync(path.join(RM, r, dn));
       const d = parse(inst(['--migrate-dirname', '--dry-run', '--root', RM]));
-      const dryOk = rel(d.wouldRename) === ['g\\deep2', 'only'].sort().join(',') && rel(d.skippedBoth) === 'both' && (d.renamed || []).length === 0 && ex('only', '.claude-history') && !ex('only', HD);
+      const dryOk = rel(d.wouldRename) === [path.join('g', 'deep2'), 'only'].sort().join(',') && rel(d.skippedBoth) === 'both' && (d.renamed || []).length === 0 && ex('only', '.claude-history') && !ex('only', HD);
       const m = parse(inst(['--migrate-dirname', '--root', RM]));
       const read = (r, dn) => { try { return fs.readFileSync(path.join(RM, r, dn, 'STATUS.md'), 'utf-8'); } catch { return ''; } };
-      const runOk = rel(m.renamed) === ['g\\deep2', 'only'].sort().join(',') && rel(m.skippedBoth) === 'both' && (m.errors || []).length === 0
+      const runOk = rel(m.renamed) === [path.join('g', 'deep2'), 'only'].sort().join(',') && rel(m.skippedBoth) === 'both' && (m.errors || []).length === 0
         && !ex('only', '.claude-history') && /ONLY/.test(read('only', HD)) && /DEEP2/.test(read(path.join('g', 'deep2'), HD))
         && /BOTH_OLD/.test(read('both', '.claude-history')) && /BOTH_NEW/.test(read('both', HD))
         && ex(path.join('g', 'x', 'deep3'), '.claude-history') && !ex(path.join('g', 'x', 'deep3'), HD) && ex('.hidden', '.claude-history') && !ex('none', HD);
@@ -1090,7 +1090,7 @@ async function main() {
         if (!Array.isArray(g) || g.length !== 1 || 'matcher' in g[0] || g[0].hooks.length !== 1) return false;
         const h = g[0].hooks[0];
         const want = `node "${hookFwd}/${scripts[ev]}" --agent codex`;
-        return h.type === 'command' && h.command === want && h.commandWindows === want && /^node "[A-Za-z]:\//.test(h.command) && Number.isFinite(h.timeout);
+        return h.type === 'command' && h.command === want && h.commandWindows === want && /^node "(?:\/|[A-Za-z]:\/)/.test(h.command) && Number.isFinite(h.timeout);
       });
       const before = fs.readFileSync(cf, 'utf-8');
       const c2 = inst(['--codex-hooks']);
