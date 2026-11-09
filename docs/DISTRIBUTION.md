@@ -34,6 +34,10 @@
 - 확인 명령: `claude plugin validate .` → `Validation passed`, `npm test` → 266 + 92 + 23. 릴리스 v0.7.0 생성 완료, About·Topics 갱신 완료(2026-11-09).
 - **미확인**: 마켓플레이스 한 줄 설치가 실제로 훅을 등록하는지(`--plugin-dir` 로는 2026-10-12 1회 확인). 공지 전에 다른 PC 또는 새 프로필에서 1회 실측 권장.
 
+### 1-3. 0.8.0 / 0.8.1 (2026-11-10)
+
+- 0.8.0: 이름 연결어(`라는`·`이라는`·`란`·`이란` / `called`·`named`) 허용, STATUS 선택 절 「추천」/「Suggested」, 계정 도구(tracker-cred) 복원 → 로컬 훅과 기능 동일. 0.8.1: 추천 항목을 선택지(항목별 + 「다른 할 일」)로 묻는 지시문. 확인: `npm test` 277 + 92 + 23, `claude plugin validate .` 통과.
+
 ## 2. 어디에 배포하나
 
 | 채널 | 왜 | 어떻게 | 확인 상태 |
@@ -81,6 +85,7 @@ What it does
 - At the end of each reply the agent writes a short block (Working on / Done / Next / Progress); the Stop hook saves it to STATUS.md with the author.
 - On session start, or whenever you mention a project by name ("MyApp project, continue") or by path, the hook injects STATUS.md + the tail of today's and yesterday's log, and the agent opens with a [Status] report that names the last worker.
 - Same scripts, same files for every agent, so one timeline. Optional tracker page (a checklist of items for you to verify) and a /tracker-test skill that checks URL items.
+- Name a project from anywhere: "MyApp project, continue", "project called MyApp" (Korean "MyApp 라는 프로젝트" works too). The STATUS block may end with a Suggested section — 0-3 things worth doing next; the agent offers them as a choice (plus "Something else") and starts nothing until you pick.
 - No LLM calls, no database, no cloud. Plain markdown in the project folder. API-key-looking strings are masked; tool output is never logged.
 
 Install
@@ -106,6 +111,7 @@ ai-history — Claude Code·Codex·Grok·Kimi·Cursor 가 프로젝트마다 하
 - 응답 끝에 에이전트가 짧은 블록(하던 일 / 한 일 / 다음 할 일 / 진행도)을 쓰면 Stop 훅이 작성자 머리말과 함께 STATUS.md 로 저장합니다.
 - 세션 시작 때, 또는 프로젝트를 이름("MyApp 프로젝트 이어서")이나 경로로 말할 때 STATUS.md 와 오늘·어제 로그 꼬리를 주입하고, 에이전트는 마지막 작업자를 포함한 [현황] 보고로 시작합니다.
 - 모든 에이전트가 같은 스크립트·같은 파일을 쓰므로 타임라인이 하나입니다. 선택으로 트래커 페이지(사용자 확인 점검표)와 URL 항목을 검사하는 /tracker-test 스킬이 있습니다.
+- 어디서 열었든 "MyApp 프로젝트 이어서", "MyApp 라는 프로젝트" 처럼 이름만 말하면 그 프로젝트에 기록합니다. STATUS 블록 끝의 「추천」 절(다음에 하면 좋은 일 0~3줄)은 에이전트가 선택지(+「다른 할 일」)로 물어보고, 고르기 전에는 시작하지 않습니다.
 - LLM 호출·DB·클라우드 없음. 프로젝트 폴더의 마크다운뿐. API 키처럼 보이는 문자열은 마스킹하고 도구 출력은 기록하지 않습니다.
 
 설치

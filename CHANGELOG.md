@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.1 — 2026-11-10
+
+- `추천` / `Suggested` items are now offered as a choice, not just mentioned: in the reply that writes them and after `[Status]` in the next session, the agent asks with AskUserQuestion when available (else a numbered list), one option per item plus a last option 「다른 할 일」 / "Something else", and starts nothing until the user picks. Instruction text only (ko/en); README updated; test row 15 (e) adjusted.
+
 ## 0.8.0 — 2026-11-10
 
 Functionally the same as the author's local hook set again (only local configuration such as ALIASES differs). The plugin directory is no longer a constraint.

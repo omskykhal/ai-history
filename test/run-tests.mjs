@@ -2062,13 +2062,15 @@ async function row15() {
   {
     const I = await import('../i18n.mjs'); const tk = I.T('ko'); const te = I.T('en');
     const pk = tk.promptInstruction('.ai-history', C.statusFormatFor(KO)); const pe = te.promptInstruction('.ai-history', C.statusFormatFor(EN));
-    const ok = /`추천` 절에는 문맥 흐름상 다음에 하면 좋은 일을 0~3줄로 적되, 지시받지 않은 일은 적기만 하고 실행하지 마라/.test(pk)
-      && /STATUS 에 `추천` 절이 있으면 `\[현황\]` 마지막 줄에 그 항목을 한 줄로 제시하고 진행할지 물어라\(스스로 시작하지 마라\)/.test(tk.sessionInstruction)
-      && /`추천` 절이 있으면 `\[현황\]` 마지막 줄에 한 줄로 제시하고 진행할지 물어라/.test(tk.mentionRecorded('X', 'C:\\x'))
-      && /Under `Suggested`, write 0-3 lines/.test(pe) && /do not act on anything you were not asked to do/.test(pe)
-      && /If STATUS has a `Suggested` section, present its items in one line at the end of `\[Status\]` and ask whether to proceed \(do not start them yourself\)/.test(te.sessionInstruction)
-      && /`Suggested` section, present it in one line at the end of `\[Status\]` and ask whether to proceed/.test(te.mentionRecorded('X', 'C:\\x'));
-    rec(15, '(e) 추천 지시문 ko/en', 'prompt·session·mention 지시문 3종에 추천/Suggested 규칙', `ok=${ok}`, ok);
+    const CHOICE_KO = /선택지로 물어라\(AskUserQuestion 을 쓸 수 있으면 그것으로, 아니면 번호 목록\): (?:추천 )?항목 하나씩 \+ 마지막 선택지 「다른 할 일」\. 선택 전에는 (?:실행|시작)하지 마라/;
+    const CHOICE_EN = /as a choice \(with AskUserQuestion when available, else a numbered list\): one option per item plus a last option "Something else"\. Do (?:nothing|not start anything) until the user picks/;
+    const ok = /`추천` 절에는 문맥 흐름상 다음에 하면 좋은 일을 0~3줄로 적되, 지시받지 않은 일은 적기만 하고 실행하지 마라/.test(pk) && CHOICE_KO.test(pk)
+      && /STATUS 에 `추천` 절이 있으면 `\[현황\]` 뒤에/.test(tk.sessionInstruction) && CHOICE_KO.test(tk.sessionInstruction)
+      && /`추천` 절이 있으면 `\[현황\]` 뒤에/.test(tk.mentionRecorded('X', 'C:\\x')) && CHOICE_KO.test(tk.mentionRecorded('X', 'C:\\x'))
+      && /Under `Suggested`, write 0-3 lines/.test(pe) && /do not act on anything you were not asked to do/.test(pe) && CHOICE_EN.test(pe)
+      && /If STATUS has a `Suggested` section, ask about its items after `\[Status\]`/.test(te.sessionInstruction) && CHOICE_EN.test(te.sessionInstruction)
+      && CHOICE_EN.test(te.mentionRecorded('X', 'C:\\x'));
+    rec(15, '(e) 추천 지시문 ko/en', 'prompt·session·mention 지시문 3종에 추천/Suggested 규칙 + 선택지 질문(항목별 + 「다른 할 일」/"Something else")', `ok=${ok}`, ok);
   }
   // (f) Stop 통합: 5절 블록 → STATUS.md 에 추천 저장·형식 불완전 로그 없음 / 4절 블록도 불완전 아님
   {

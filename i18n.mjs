@@ -26,17 +26,17 @@ const STR = {
       + '`마지막 작업자` 줄이 있으면 `[현황]` 첫 줄에 마지막 작업자와 시각을 포함하라. '
       + '사용자의 첫 메시지에 구체적 지시가 있으면 보고 뒤에 그 지시를 수행하고, 인사나 빈 요청이면 보고 후 대기하라. '
       + '이전에 하던 미완료 작업은 사용자 지시 없이 재개하지 마라. '
-      + 'STATUS 에 `추천` 절이 있으면 `[현황]` 마지막 줄에 그 항목을 한 줄로 제시하고 진행할지 물어라(스스로 시작하지 마라).',
+      + 'STATUS 에 `추천` 절이 있으면 `[현황]` 뒤에 그 항목을 선택지로 물어라(AskUserQuestion 을 쓸 수 있으면 그것으로, 아니면 번호 목록): 항목 하나씩 + 마지막 선택지 「다른 할 일」. 선택 전에는 시작하지 마라.',
     promptInstruction: (dirname, fmt) => '[auto-history] 도구를 1건 이상 사용한 응답은 **맨 끝**에 아래 블록을 그대로 출력하라'
       + `(대화만 한 짧은 턴은 생략 가능). 블록은 훅이 \`${dirname}/STATUS.md\`로 저장한다. `
       + '블록 본문에 추측성 표현을 쓰지 말고 확인된 사실만 적어라. 각 제목 아래 1~5줄, 한국어. '
-      + '`추천` 절에는 문맥 흐름상 다음에 하면 좋은 일을 0~3줄로 적되, 지시받지 않은 일은 적기만 하고 실행하지 마라.\n' + fmt,
+      + '`추천` 절에는 문맥 흐름상 다음에 하면 좋은 일을 0~3줄로 적되, 지시받지 않은 일은 적기만 하고 실행하지 마라. 추천 항목을 적었으면 같은 응답에서 그 항목을 선택지로 물어라(AskUserQuestion 을 쓸 수 있으면 그것으로, 아니면 번호 목록): 추천 항목 하나씩 + 마지막 선택지 「다른 할 일」. 선택 전에는 실행하지 마라.\n' + fmt,
     mentionUnrecorded: (name, dir) => `[auto-history] 요청에 언급된 프로젝트 \`${name}\`(\`${dir}\`)에는 아직 기록이 없다. 이 프로젝트 작업은 \`${dir}\` 기준으로 하라. `
       + "첫 줄을 `[현황]`으로 시작해 '이 프로젝트의 기록은 아직 없음(새로 시작)'을 한 줄로 알린 뒤 이번 요청을 수행하라.",
     mentionRecorded: (name, dir) => `[auto-history] 요청에 언급된 프로젝트 \`${name}\`(\`${dir}\`)의 최근 기록이다. `
       + '첫 줄 `[현황]`으로 3~8줄 보고 후 이번 요청을 수행하라. `마지막 작업자` 줄이 있으면 `[현황]` 첫 줄에 마지막 작업자와 시각을 포함하라. '
       + `이 프로젝트 작업은 \`${dir}\` 기준으로 하라. 미완료 작업은 지시 없이 재개하지 마라. `
-      + 'STATUS 에 `추천` 절이 있으면 `[현황]` 마지막 줄에 한 줄로 제시하고 진행할지 물어라.',
+      + 'STATUS 에 `추천` 절이 있으면 `[현황]` 뒤에 그 항목을 선택지로 물어라(AskUserQuestion 을 쓸 수 있으면 그것으로, 아니면 번호 목록): 항목 하나씩 + 마지막 선택지 「다른 할 일」. 선택 전에는 시작하지 마라.',
     blockReason: (fmt) => `[auto-history] 이번 응답에 상태 블록이 없습니다. 아래 형식의 블록만 출력하고 종료하세요:\n${fmt}`,
     sessionStatusReminder: (fmt) => `[auto-history] 도구를 1건 이상 사용한 응답은 맨 끝에 아래 블록을 그대로 출력하라. 각 제목 아래 1~5줄, 한국어, 확인된 사실만.\n${fmt}`,
     readerDelivered: '이 기록을 방금 전달받았다. 위 지시대로 `[현황]`을 보고하라.',
@@ -197,17 +197,17 @@ const STR = {
       + 'If a `Last worker` line is present, include the last worker and time in the first `[Status]` line. '
       + "If the user's first message contains a concrete instruction, carry it out after the report; if it is a greeting or empty, wait after the report. "
       + 'Do not resume unfinished work without an explicit instruction from the user. '
-      + 'If STATUS has a `Suggested` section, present its items in one line at the end of `[Status]` and ask whether to proceed (do not start them yourself).',
+      + 'If STATUS has a `Suggested` section, ask about its items after `[Status]` as a choice (with AskUserQuestion when available, else a numbered list): one option per item plus a last option "Something else". Do not start anything until the user picks.',
     promptInstruction: (dirname, fmt) => '[auto-history] Any reply in which you used at least one tool must END with the block below, verbatim '
       + `(a short conversation-only turn may omit it). A hook saves the block to \`${dirname}/STATUS.md\`. `
       + 'Write only verified facts, no speculation. 1-5 lines under each heading. '
-      + 'Under `Suggested`, write 0-3 lines on what would be good to do next given the context; write it down, do not act on anything you were not asked to do.\n' + fmt,
+      + 'Under `Suggested`, write 0-3 lines on what would be good to do next given the context; write it down, do not act on anything you were not asked to do. If you wrote any Suggested items, ask about them in the same reply as a choice (with AskUserQuestion when available, else a numbered list): one option per item plus a last option "Something else". Do nothing until the user picks.\n' + fmt,
     mentionUnrecorded: (name, dir) => `[auto-history] The project \`${name}\` (\`${dir}\`) mentioned in the request has no history yet. Work on this project relative to \`${dir}\`. `
       + "Start with a `[Status]` line saying 'no history for this project yet (starting fresh)', then carry out the request.",
     mentionRecorded: (name, dir) => `[auto-history] Recent history of the project \`${name}\` (\`${dir}\`) mentioned in the request. `
       + 'Start with `[Status]` and report in 3-8 lines, then carry out the request. If a `Last worker` line is present, include the last worker and time in the first `[Status]` line. '
       + `Work on this project relative to \`${dir}\`. Do not resume unfinished work without an instruction. `
-      + 'If STATUS has a `Suggested` section, present it in one line at the end of `[Status]` and ask whether to proceed.',
+      + 'If STATUS has a `Suggested` section, ask about its items after `[Status]` as a choice (with AskUserQuestion when available, else a numbered list): one option per item plus a last option "Something else". Do not start anything until the user picks.',
     blockReason: (fmt) => `[auto-history] This reply has no status block. Output only a block in the format below and stop:\n${fmt}`,
     sessionStatusReminder: (fmt) => `[auto-history] Any reply in which you used at least one tool must END with the block below, verbatim. 1-5 lines under each heading, verified facts only.\n${fmt}`,
     readerDelivered: 'You just received this record. Report `[Status]` as instructed above.',
