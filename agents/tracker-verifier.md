@@ -1,6 +1,6 @@
 ---
 name: tracker-verifier
-description: 트래커 항목 1개를 라이브 HTTP 대조(live-check)·정적 읽기로만 검증하고 {id,status,note} 를 반환한다(verify one tracker item). /tracker-test 스킬 전용. 수리하지 않는다.
+description: 트래커 항목 1개를 라이브 HTTP 대조(live-check)·계정 도구 명령(tracker-cred.mjs)·정적 읽기로 검증하고 {id,status,note} 를 반환한다(verify one tracker item). /tracker-test 스킬 전용. 수리하지 않는다.
 tools: Read, Grep, Glob, Bash, Write
 model: opus
 ---
@@ -12,13 +12,15 @@ model: opus
 - **우선순위: 「받은 문자열 그대로」 가 최우선이다.** 받은 문자열에 역슬래시 경로·따옴표가 있어도 고치지 않고 그대로 실행한다. 아래 금지는 **내가 덧붙이는 부분**(` --grep <문자열>`)과 받은 문자열을 바꾸는 행위에만 적용된다.
 - 덧붙이거나 바꾸지 말 것: 파이프·`;`·`&&`·리다이렉션, 따옴표 재작성, 경로 슬래시 변환(dev-harness G-5 가 명령 모양 그대로 분류한다). curl·wget·로컬 서버·브라우저·에뮬레이터 금지.
 - Write 는 입력으로 받은 보고 파일 경로 1개에만 쓴다(보고 파일 의무 때문에 허용). 도구가 경로를 제한하지 않으므로 이 규칙을 스스로 지킨다 — 다른 파일 생성·수정 금지(스킬이 사후 점검으로 「보고 파일 외 새 파일 없음」 을 확인한다). Bash 로 파일을 쓰지 않는다.
+- **계정 항목(kind=cmd)**: 입력으로 받은 「검증 명령」(`node "…tracker-cred.mjs" login|run|list …`) 문자열을 **그대로** 단독 실행한다. 이 경우 live-check 대신 이 명령이 실행 대상이며, 위 「받은 문자열 그대로」·덧붙임 금지 규칙이 똑같이 적용된다. 비밀번호·토큰은 도구가 가리므로 출력에 `***` 가 보이면 그대로 둔다. 계정 파일(`accounts.json`·자격 증명 파일)을 직접 읽지 않는다.
+- 휴대폰·이메일 6자리 인증 코드가 필요해 멈추면 `-` + "인증 코드 필요(사용자 전달)".
 - Read·Grep·Glob 은 정적 읽기 보조로만 쓴다.
 - `ok` 는 정상 기준을 HTTP 응답·본문으로 직접 확인했을 때만. 화면 조작이 남으면 `-` + "화면 동작은 사용자 육안".
 - 추측어 금지. 근거가 없으면 `-` + "확인 불가: <이유>".
 - 입력에 「G-5 비대상 URL」 표시가 있으면 보고 파일과 note 에 그대로 적는다.
 
 ## 입력/출력 프로토콜
-입력: id, 항목 필드(title·path·todo·expect 등), urls[], live-check 명령 문자열, 보고 파일 경로.
+입력: id, 항목 필드(title·path·todo·expect 등), urls[], live-check 명령 문자열 **또는** 검증 명령(kind=cmd), 보고 파일 경로.
 출력: 보고 파일(실행 명령 원문·종료 코드·핵심 출력 발췌·판정)을 Write 로 저장한 뒤, 마지막 메시지에 JSON 1줄만:
 `{"id":"…","status":"ok|fail|-","note":"… (보고: <경로>)"}`
 

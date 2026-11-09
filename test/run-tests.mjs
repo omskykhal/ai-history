@@ -1679,8 +1679,8 @@ async function main() {
   await row12();
   // ---------- 13행 MD 점검표·MD 탭·결과 회수·tracker-test 규칙(0.5.0) ----------
   await row13();
-  // ---------- 14행 0.8.0 연결어·추천 절 ----------
-  await row14();
+  // ---------- 15행 0.8.0 연결어·추천 절 ----------
+  await row15();
 
   // ---------- 결과 ----------
   const esc = (s) => String(s).replace(/\|/g, '\\|').replace(/\r?\n/g, '⏎');
@@ -2021,8 +2021,8 @@ async function row12() {
 }
 
 // ---------- 13행: MD 점검표·MD 탭·결과 회수(①블록 by ②md 결과 ③inbox parse)·tracker-test 규칙 ----------
-// ---------- 14행 0.8.0: 이름 연결어("라는"/"called")·STATUS 선택 절 「추천」 ----------
-async function row14() {
+// ---------- 15행 0.8.0: 이름 연결어("라는"/"called")·STATUS 선택 절 「추천」 ----------
+async function row15() {
   const KO = { AUTO_HISTORY_LANG: 'ko' };
   const EN = { AUTO_HISTORY_LANG: 'en' };
   const folders = [{ name: 'ai-test', depth: 1 }, { name: 'MyMemo', depth: 1 }, { name: 'policy', depth: 1 }, { name: 'sub', depth: 2 }];
@@ -2031,19 +2031,19 @@ async function row14() {
   {
     const got = [m('ai-test 라는 프로젝트 시작하자'), m('ai-test라는 프로젝트'), m('MyMemo 이라는 폴더'), m('MyMemo 란 프로젝트'), m('MyMemo이란 프로젝트'), m('sub 라는 프로젝트')].map(String);
     const want = ['ai-test', 'ai-test', 'MyMemo', 'MyMemo', 'MyMemo', 'sub'];
-    rec(14, '(a) 연결어 라는/이라는/란/이란', want.join(','), got.join(','), got.join(',') === want.join(','));
+    rec(15, '(a) 연결어 라는/이라는/란/이란', want.join(','), got.join(','), got.join(',') === want.join(','));
   }
   // (b) 영어 연결어: project|folder called|named <name>
   {
     const got = [m('project called ai-test'), m('the project named MyMemo'), m('folder called policy'), m('project calledai-test')].map(String);
     const want = ['ai-test', 'MyMemo', 'policy', 'null'];
-    rec(14, '(b) 연결어 called/named', want.join(','), got.join(','), got.join(',') === want.join(','));
+    rec(15, '(b) 연결어 called/named', want.join(','), got.join(','), got.join(',') === want.join(','));
   }
   // (c) 연결어가 경계·다른 말을 허용하지 않음
   {
     const got = [m('policyholder 라는 프로젝트'), m('ai-test 에 관한 프로젝트'), m('ai-test 라는 폴더가 아니라'), m('sub 라는 폴더')].map(String);
     const want = ['null', 'null', 'ai-test', 'null'];
-    rec(14, '(c) 연결어 경계: 부분어·다른 조사·깊이2 폴더 키워드 제외', want.join(','), got.join(','), got.join(',') === want.join(','));
+    rec(15, '(c) 연결어 경계: 부분어·다른 조사·깊이2 폴더 키워드 제외', want.join(','), got.join(','), got.join(',') === want.join(','));
   }
   // (d) STATUS 형식: 5번째 절 추천/Suggested, 4절 블록은 누락 아님
   {
@@ -2054,7 +2054,7 @@ async function row14() {
     const m5k = C.missingHeadings('## 하던 일\n- a\n## 한 일\n- b\n## 다음 할 일\n- c\n## 진행도\n- d\n## 추천\n- e', KO);
     const m4e = C.missingHeadings('## Working on\n- a\n## Done\n- b\n## Next\n- c\n## Progress\n- d', EN);
     const mX = C.missingHeadings('## 하던 일\n- a\n## 추천\n- e', KO);
-    rec(14, '(d) 추천/Suggested 절·누락 판정', 'ko/en 형식에 5번째 절·4절·5절 블록 누락 [] · 추천만 있는 블록은 3개 누락',
+    rec(15, '(d) 추천/Suggested 절·누락 판정', 'ko/en 형식에 5번째 절·4절·5절 블록 누락 [] · 추천만 있는 블록은 3개 누락',
       `fk=${okK} fe=${okE} m4k=${JSON.stringify(m4k)} m5k=${JSON.stringify(m5k)} m4e=${JSON.stringify(m4e)} mX=${mX.length}`,
       okK && okE && m4k.length === 0 && m5k.length === 0 && m4e.length === 0 && mX.length === 3 && !mX.includes('추천'));
   }
@@ -2068,7 +2068,7 @@ async function row14() {
       && /Under `Suggested`, write 0-3 lines/.test(pe) && /do not act on anything you were not asked to do/.test(pe)
       && /If STATUS has a `Suggested` section, present its items in one line at the end of `\[Status\]` and ask whether to proceed \(do not start them yourself\)/.test(te.sessionInstruction)
       && /`Suggested` section, present it in one line at the end of `\[Status\]` and ask whether to proceed/.test(te.mentionRecorded('X', 'C:\\x'));
-    rec(14, '(e) 추천 지시문 ko/en', 'prompt·session·mention 지시문 3종에 추천/Suggested 규칙', `ok=${ok}`, ok);
+    rec(15, '(e) 추천 지시문 ko/en', 'prompt·session·mention 지시문 3종에 추천/Suggested 규칙', `ok=${ok}`, ok);
   }
   // (f) Stop 통합: 5절 블록 → STATUS.md 에 추천 저장·형식 불완전 로그 없음 / 4절 블록도 불완전 아님
   {
@@ -2079,14 +2079,14 @@ async function row14() {
     const a2 = P('p14f2'); const s2 = startSession(a2); arm(s2); stop(s2, a2, { last_assistant_message: `완료.\n${four}` });
     const st1 = statusOf(a1) || ''; const st2 = statusOf(a2) || '';
     const l1 = logOf(a1); const l2 = logOf(a2);
-    rec(14, '(f) Stop: 추천 절 저장·불완전 아님', 'STATUS1 에 "## 추천\\n- 5e 인터뷰 시작"·두 로그 모두 형식 불완전 없음·둘 다 STATUS 갱신',
+    rec(15, '(f) Stop: 추천 절 저장·불완전 아님', 'STATUS1 에 "## 추천\\n- 5e 인터뷰 시작"·두 로그 모두 형식 불완전 없음·둘 다 STATUS 갱신',
       `st1=${/## 추천\n- 5e 인터뷰 시작/.test(st1)} inc1=${/형식 불완전/.test(l1)} inc2=${/형식 불완전/.test(l2)} up=${/STATUS 갱신/.test(l1) && /STATUS 갱신/.test(l2)}`,
       /## 추천\n- 5e 인터뷰 시작/.test(st1) && /## 진행도\n- 4d/.test(st2) && !/형식 불완전/.test(l1) && !/형식 불완전/.test(l2) && /STATUS 갱신/.test(l1) && /STATUS 갱신/.test(l2));
   }
-  // (g) 기존 1~13행 전부 통과
+  // (g) 기존 1~14행 전부 통과
   {
-    const prior = results.filter((x) => x.row <= 13);
-    rec(14, '(g) 기존 1~13행 전부 통과', `${prior.length}/${prior.length} PASS`, `${prior.filter((x) => x.pass).length}/${prior.length}`, prior.every((x) => x.pass));
+    const prior = results.filter((x) => x.row <= 14);
+    rec(15, '(g) 기존 1~14행 전부 통과', `${prior.length}/${prior.length} PASS`, `${prior.filter((x) => x.pass).length}/${prior.length}`, prior.every((x) => x.pass));
   }
 }
 
@@ -2169,7 +2169,8 @@ async function row13() {
     const D = dataOf(B.buildTrackerHtml(J0, { anchor: aD }));
     const mh = B.writeTrackerMd(aD, J0, KO);
     const fileMd = readT(mdFile(aD)) || '';
-    const strip = (s) => String(s).split('\n').filter((l) => !l.startsWith('- 앵커: ')).join('\n');
+    // 0.5.2: the account tool line is a location line like the anchor (file = absolute path, tab = name), so it is left out of the comparison
+    const strip = (s) => String(s).split('\n').filter((l) => !l.startsWith('- 앵커: ') && !l.startsWith('- 계정 도구: ')).join('\n');
     rec(13, '(d) D.md = 파일 md(앵커 줄 제외)', '앵커 줄 외 동일·탭 앵커=폴더 이름·절대경로 없음·writeTrackerMd 12자=파일 sha',
       `md=${!!(D && D.md)} same=${!!D && strip(D.md) === strip(fileMd)} label=${!!D && D.md.includes('- 앵커: t21d\n')} abs=${!!D && D.md.toLowerCase().includes(aD.toLowerCase())} hash=${mh}/${sha(fileMd)}`,
       !!D && typeof D.md === 'string' && strip(D.md) === strip(fileMd) && D.md !== fileMd && D.md.includes('- 앵커: t21d\n') && !D.md.toLowerCase().includes(aD.toLowerCase())
@@ -2583,6 +2584,39 @@ async function row13() {
     const { code, t } = tgOf(a);
     rec(13, '(ad) 미병합 md ok → 대상 제외', 'A-1 없음·A-2 만', `code=${code} tg=${JSON.stringify(t)}`,
       code === 0 && t.length === 1 && t[0].id === 'A-2' && !('pendingMd' in t[0]));
+  }
+
+  // ===== 0.5.2: account checks (check field · kind cmd · tracker-cred.mjs) =====
+  {
+    const CRED = path.join(HOOK, 'tracker-cred.mjs');
+    const chk = `node "${CRED}" login acc1`;
+    // (ca) check 는 병합에 남고, 계정 도구 명령이면 kind=cmd, 그 외 명령은 cmd 아님
+    const m0 = C.mergeTracker(null, { items: [{ id: 'C-1', title: '로그인', check: chk }, { id: 'C-2', title: '다른 명령', check: 'rm -rf /' }] }, { by: 'claude-t' });
+    const tg = M.trackerTargets(m0.json);
+    const g = (id) => tg.find((x) => x.id === id) || {};
+    rec(14, '(ca) check 병합·kind cmd', 'C-1 check 보존·kind cmd·check 동봉 / C-2 kind ui·check 없음',
+      `c1=${JSON.stringify(g('C-1'))} c2=${JSON.stringify(g('C-2'))}`,
+      (m0.json.items[0].check === chk) && g('C-1').kind === 'cmd' && g('C-1').check === chk && g('C-2').kind === 'ui' && !('check' in g('C-2')));
+    // (cb) MD 점검표에 계정 도구 규칙 줄과 「검증 명령」 절
+    const md = M.buildChecklistMd(m0.json, { anchor: 'C:\\x' });
+    rec(14, '(cb) MD 계정 도구 규칙·검증 명령 절', '규칙 줄에 tracker-cred.mjs·「## 검증 명령 (1)」·C-1 명령 1줄·C-2 없음',
+      `has=${md.includes('tracker-cred.mjs')} sec=${md.includes('## 검증 명령 (1)')}`,
+      md.includes('tracker-cred.mjs') && md.includes('## 검증 명령 (1)') && md.includes(`- C-1: \`${chk}\``) && !md.includes('- C-2:'));
+    // (cc) list 는 비밀번호를 내지 않고, run 은 자식 출력의 비밀번호를 *** 로 가림
+    const a = fs.mkdtempSync(path.join(os.tmpdir(), 'ah-cred-'));
+    fs.mkdirSync(path.join(a, '.ai-history'));
+    fs.writeFileSync(path.join(a, '.ai-history', 'accounts.json'), JSON.stringify({ accounts: { acc1: { email: 'u1@example.com', password: 'Sekret-9876', tier: 'pro' } } }));
+    const l = spawnSync(process.execPath, [CRED, 'list', '--anchor', a], { encoding: 'utf-8' });
+    const r = spawnSync(process.execPath, [CRED, 'run', 'acc1', '--anchor', a, '--', process.execPath, '-e', 'console.log("E=" + process.env.TEST_EMAIL + " P=" + process.env.TEST_PASSWORD)'], { encoding: 'utf-8' });
+    rec(14, '(cc) list 비공개·run 주입+가림', 'list 에 u1@example.com·(있음)·비밀번호 없음 / run 출력 E=u1@example.com P=***',
+      `list=${JSON.stringify(l.stdout.trim())} run=${JSON.stringify(r.stdout.trim())} code=${r.status}`,
+      l.status === 0 && l.stdout.includes('u1@example.com') && l.stdout.includes('(있음)') && !l.stdout.includes('Sekret-9876')
+        && r.status === 0 && r.stdout.includes('E=u1@example.com P=***') && !r.stdout.includes('Sekret-9876'));
+    // (cd) 별칭 없음·명령 없음은 종료 코드 2
+    const n1 = spawnSync(process.execPath, [CRED, 'run', 'nope', '--anchor', a, '--', 'x'], { encoding: 'utf-8' });
+    const n2 = spawnSync(process.execPath, [CRED, 'run', 'acc1', '--anchor', a], { encoding: 'utf-8' });
+    rec(14, '(cd) 잘못된 호출 = 2', '별칭 없음 2·명령 없음 2', `n1=${n1.status} n2=${n2.status}`, n1.status === 2 && n2.status === 2);
+    fs.rmSync(a, { recursive: true, force: true });
   }
 }
 

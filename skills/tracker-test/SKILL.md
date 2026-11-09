@@ -20,7 +20,7 @@ description: 트래커 미확인·문제 항목을 검증 에이전트(tracker-v
 
 ## 절차
 1. `TRACKER.json` 확인. 없거나 mode off → 보고 후 종료.
-2. 대상 목록: `node "<HOOK_DIR>/tracker-md.mjs" targets "<TRACKER.json>"` 출력**만** 사용한다(직접 판단 금지). 대상식 = `user.status != 'ok'` 이고 `ai.status != 'ok'` 인 항목. 출력 각 항목은 `{id, kind:'http'|'ui', urls:[], uiLabelEligible}`(아직 Stop 이 병합하지 않은 CHECKLIST.md 결과가 있으면 `pendingMd:true` 가 붙고 `uiLabelEligible:false`, 그 결과가 ok 면 대상에서 빠짐). 이번 대상 id 집합 = 출력 id 들. `pendingMd:true` 항목은 다른 주체의 판정이 병합 대기 중이므로 `-` 결과를 블록에 넣지 않는다(판정 보호 규칙과 동일).
+2. 대상 목록: `node "<HOOK_DIR>/tracker-md.mjs" targets "<TRACKER.json>"` 출력**만** 사용한다(직접 판단 금지). 대상식 = `user.status != 'ok'` 이고 `ai.status != 'ok'` 인 항목. 출력 각 항목은 `{id, kind:'http'|'ui'|'cmd', urls:[], uiLabelEligible, check?}`(아직 Stop 이 병합하지 않은 CHECKLIST.md 결과가 있으면 `pendingMd:true` 가 붙고 `uiLabelEligible:false`, 그 결과가 ok 면 대상에서 빠짐). 이번 대상 id 집합 = 출력 id 들. `pendingMd:true` 항목은 다른 주체의 판정이 병합 대기 중이므로 `-` 결과를 블록에 넣지 않는다(판정 보호 규칙과 동일).
 3. 직전 실행 기록 `<앵커>/.ai-history/tracker/reports/last-run.json` 을 읽는다. 형식:
    `{round, roundIds, targetsHash, noChangeCount, updatedAt, endReason, results:{<id>:{status,note}}, agents, agentsTotal}`
    - `roundIds` = 1라운드 시작 시점의 대상 id 배열(정렬). `targetsHash` = `roundIds` 를 `,` 로 이은 문자열의 sha1 앞 12자(기록용, 1라운드에서만 계산하고 이어진 라운드에서는 다시 계산하지 않는다).
@@ -34,6 +34,11 @@ description: 트래커 미확인·문제 항목을 검증 에이전트(tracker-v
    - `.harness.json` 이 없거나 `live_check` 가 빈 값이면 에이전트를 띄우지 않고 그 http 항목을 `-` + 「HTTP 확인 수단 없음(.harness.json live_check 없음)」 으로 둔다(판정 보호 규칙 적용).
    - 에이전트 입력: id, 항목 필드, urls[], live-check 명령 문자열, 보고 파일 경로. 반환: JSON 1줄 `{id,status,note}`.
    - 사후 점검: ① 보고 파일의 실행 명령 줄이 넘긴 live-check 문자열로 시작하는지 ② 보고 파일 외에 새 파일이 생기지 않았는지(`git status`·폴더 목록으로 확인). 어긋나면 그 판정을 `-` + "명령 불일치" 로 바꾸고(판정 보호 규칙 적용) 보고에 적는다.
+
+5-1. kind=cmd(항목 `check` 가 계정 도구 명령, targets 출력의 `check`): http 와 같은 방식으로 항목당 tracker-verifier 1개를 전경 병렬 호출한다. 에이전트 입력의 실행 명령 = targets 출력 `check` 문자열 **그대로**(live-check 대신). `.harness.json` live_check 가 없어도 실행한다.
+   - 사후 점검 ①은 「보고 파일의 실행 명령 줄이 넘긴 check 문자열로 시작하는지」 로 바꿔 적용한다.
+   - 이어진 라운드(2 이상) 대상에는 직전 `-` + "네트워크 오류" 였던 cmd 항목도 넣는다.
+   - 유료 호출이 들어간 명령은 하네스 확인 창이 뜰 수 있다 — 거부되면 `-` + "권한 없음".
 
 ## 보고 경로
 - 항목별 보고 파일: `<앵커>/.omc/research/<YYYY-MM-DD>-tracker-test-<id>.md`.
