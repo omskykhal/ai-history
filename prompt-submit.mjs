@@ -1,7 +1,7 @@
 // UserPromptSubmit hook: log the prompt, detect a project mention, inject the STATUS-block instruction (+ Reader when a new project was named).
 import {
   runHook, readInput, hookEnv, resolveAnchor, isInteractive, statePaths, writeState, removeFile, appendLog,
-  maybeDump, mask, oneLine, statusFormatFor, listHistoryProjects, listCandidateFolders, loadAliases, matchProjectMention, readerBody, READER_TOTAL_MAX,
+  maybeDump, mask, oneLine, statusFormatFor, listHistoryProjects, listCandidateFolders, loadAliases, matchProjectMention, readerBody, readerTotalMax,
   AGENT, historyDirName, lastWorkerLine, t, runRetention, retentionLogLine,
   trackerEligibility, trackerInstruction, trackerDbReadInstruction,
   hasArtifactTools, hasToolContext, emitPromptContext, readPending, writePending, kimiLateCapture,
@@ -61,7 +61,7 @@ runHook(async () => {
         + readerBody(hit.anchor, env, { sid8: String(data.session_id).slice(0, 8) });
     const lw = hit.recorded === false ? '' : lastWorkerLine(hit.anchor, env);
     if (lw) reader = `[auto-history] ${lw}\n${reader}`;
-    if (reader.length > READER_TOTAL_MAX) reader = reader.slice(0, READER_TOTAL_MAX);
+    if (reader.length > readerTotalMax(env)) reader = reader.slice(0, readerTotalMax(env));
     mentionReader = reader;
   }
   // History held from session start (Grok, Kimi) and the named project's history share one slot

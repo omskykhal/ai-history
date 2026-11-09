@@ -1402,14 +1402,14 @@ async function main() {
       const r = C.readerBody(a, baseEnv('x'));
       rec(10, '(n) 사본 없음 → 절 생략', "''·Reader 에 '다른 세션' 없음", `o='${o}' hasOther=${/다른 세션/.test(r)}`, o === '' && !/다른 세션/.test(r) && /=== STATUS.md ===/.test(r));
     }
-    // (o) 상한: READER_TOTAL_MAX=10000, 사본 1,000자 절단
+    // (o) 상한: READER_TOTAL_MAX=8000(0.10.0, 이전 10000), 사본 1,000자 절단
     {
       const a = P('r17o'); const h = path.join(a, HD); fs.mkdirSync(path.join(h, 'sessions'), { recursive: true });
       fs.writeFileSync(path.join(h, 'STATUS.md'), '# STATUS\n세션: aaaaaaaa\n');
       fs.writeFileSync(path.join(h, 'sessions', 'claude-bbbbbbbb.md'), `# STATUS\n세션: bbbbbbbb\n작성: claude (bbbbbbbb)\n\n${'y'.repeat(3000)}`);
       const o = C.otherSessionsBody(a, baseEnv('x'));
-      rec(10, '(o) 사본 1,000자 절단·상한 10000', 'len≈1000+…(생략)·READER_TOTAL_MAX=10000', `olen=${o.length} trunc=${/…\(생략\)/.test(o)} max=${C.READER_TOTAL_MAX}`,
-        /…\(생략\)/.test(o) && o.length < 1200 && C.READER_TOTAL_MAX === 10000);
+      rec(10, '(o) 사본 1,000자 절단·상한 8000', 'len≈1000+…(생략)·READER_TOTAL_MAX=8000', `olen=${o.length} trunc=${/…\(생략\)/.test(o)} max=${C.READER_TOTAL_MAX}`,
+        /…\(생략\)/.test(o) && o.length < 1200 && C.READER_TOTAL_MAX === 8000);
     }
     // (q) 영어 모드: 다른 세션 절·retention 로그 영어 문구, 헤더는 양언어 파싱
     {
@@ -2113,6 +2113,31 @@ async function row15() {
     rec(15, '(h) search.mjs 로컬 검색', '기본 4건(보관 제외)·--archived json 5건·--since 1d 3건·없음 exit1·잘못된 옵션 exit2·regex+limit 2건+절단 안내',
       `r1=${r1.code}/${count(r1.out)} j2=${j2 ? j2.total : 'null'} r3=${r3.code}/${count(r3.out)} r4=${r4.code} r5=${r5.code} r6=${r6.code}/${count(r6.out)}`,
       ok1 && ok2 && ok3 && ok4 && ok5 && ok6);
+  }
+  // (i) 주입 크기(설계안 A): 기본 15/5줄·줄 200자·총 8000, INJECT 파일·AUTO_HISTORY_INJECT 덮어쓰기(env 우선), 꼬리 절단·안내 절
+  {
+    const mkConfI = (name, files) => { const d = path.join(SCRATCH, name); fs.mkdirSync(d, { recursive: true }); for (const [n, c] of Object.entries(files)) fs.writeFileSync(path.join(d, n), c); return d; };
+    const d0 = C.injectLimits({});
+    const confI = mkConfI('conf-inject', { INTERACTIVE_ENTRYPOINTS: 'cli\n', INJECT: '# 시험\ntoday=3\nline=50\n' });
+    const dF = C.injectLimits({ AUTO_HISTORY_CONF_DIR: confI });
+    const dE = C.injectLimits({ AUTO_HISTORY_CONF_DIR: confI, AUTO_HISTORY_INJECT: 'today=2, total=7000, bogus=9, yday=0' });
+    const a = P('p15i'); const hd = path.join(a, HD); fs.mkdirSync(hd, { recursive: true });
+    fs.writeFileSync(path.join(hd, 'STATUS.md'), '# STATUS\n세션: abcdef12\n\n## 하던 일\n- 주입 시험\n');
+    const lines = []; for (let i = 1; i <= 30; i++) lines.push(`- 10:00:${String(i).padStart(2, '0')} [abcdef12][claude] 줄${i} ${'x'.repeat(i === 30 ? 400 : 10)}`);
+    fs.writeFileSync(path.join(hd, `${today()}.md`), lines.join('\n') + '\n');
+    const envK = { ...baseEnv(sidNew()), AUTO_HISTORY_CONF_DIR: confI, AUTO_HISTORY_INJECT: 'today=2,line=60' };
+    const body = C.readerBody(a, envK, { sid8: 'abcdef12' });
+    const tailSec = body.slice(body.indexOf('=== 오늘 로그 꼬리'), body.indexOf('=== 어제 로그 꼬리'));
+    const tailLines = tailSec.split('\n').filter((l) => l.startsWith('- '));
+    const okDef = d0.today === 15 && d0.yday === 5 && d0.line === 200 && d0.total === 8000 && d0.status === 4000 && C.READER_TOTAL_MAX === 8000 && C.readerTotalMax({}) === 8000;
+    const okFile = dF.today === 3 && dF.line === 50 && dF.yday === 5;
+    const okEnv = dE.today === 2 && dE.total === 7000 && dE.line === 50 && dE.yday === 5 && !('bogus' in dE) && C.readerTotalMax({ AUTO_HISTORY_INJECT: 'total=123' }) === 123;
+    const okTail = tailLines.length === 2 && /줄29 /.test(tailLines[0]) && /줄30 /.test(tailLines[1]) && tailLines[1].length === 61 && tailLines[1].endsWith('…') && /최대 2줄\)/.test(tailSec);
+    const okMore = /=== 더 필요한 기록 ===/.test(body) && body.includes(`node "${path.join(HOOK, 'search.mjs')}" <text> --project p15i`) && /\.ai-history\/<날짜>\.md/.test(body);
+    const okIns = /아래 로그 꼬리는 일부다/.test(C.T ? '' : (await import('../i18n.mjs')).T('ko').sessionInstruction) && /The log tails below are partial/.test((await import('../i18n.mjs')).T('en').sessionInstruction);
+    rec(15, '(i) 주입 크기 상한·INJECT 설정·꼬리 절단·검색 안내', '기본 15/5/200/8000/4000·파일 today=3 line=50·env 우선 today=2 total=7000·꼬리 2줄·줄 60자+…·안내 절·지시문 ko/en',
+      `def=${okDef} file=${okFile} env=${okEnv} tail=${okTail}(${tailLines.length}/${tailLines[1] ? tailLines[1].length : 0}) more=${okMore} ins=${okIns}`,
+      okDef && okFile && okEnv && okTail && okMore && okIns);
   }
   // (g) 기존 1~14행 전부 통과
   {

@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {
   runHook, readInput, hookEnv, emit, inScope, normalizeWinPath, isInteractive, statePaths, writeState, removeFile, maybeDump, historyDir,
-  resolveAnchor, readerBody, READER_TOTAL_MAX, VALID_SOURCES, AGENT, lastWorkerLine, t, appendLog, runRetention, retentionLogLine,
+  resolveAnchor, readerBody, readerTotalMax, VALID_SOURCES, AGENT, lastWorkerLine, t, appendLog, runRetention, retentionLogLine,
   trackerDbReadInstruction, statusFormatFor, hasArtifactTools, hasSessionContext, writePending,
 } from './common.mjs';
 
@@ -72,7 +72,7 @@ runHook(async () => {
     const lw = lastWorkerLine(anchor, env);
     const dbRead = hasArtifactTools() ? trackerDbReadInstruction(anchor, env) : ''; // read the tracker page db once (only when it has a url). Cursor, Grok and Kimi have no ArtifactData
     ctx = `${lw ? `[auto-history] ${lw}\n` : ''}${L.sessionIntro(anchor)}${L.sessionInstruction}${dbRead ? `\n${dbRead}` : ''}${readerBody(anchor, env, { sid8: String(data.session_id).slice(0, 8) })}`;
-    if (ctx.length > READER_TOTAL_MAX) ctx = ctx.slice(0, READER_TOTAL_MAX);
+    if (ctx.length > readerTotalMax(env)) ctx = ctx.slice(0, readerTotalMax(env));
   }
   if (!hasSessionContext()) {
     // Grok and Kimi do not pass session-start output to the model → hold it for the next delivery point. A folder without history has nothing to pass on.

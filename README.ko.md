@@ -127,6 +127,10 @@ API 키처럼 보이는 문자열(`AIza…`, `sk-…`, `ghp_…`, `Bearer …`, 
 
 `node search.mjs <검색어>` 가 루트 아래 프로젝트들의 `.ai-history/` 를 줄 단위로 찾습니다(색인·DB·네트워크 없음). 대상은 날짜 로그·`STATUS.md`·`sessions/*.md`·`cursor-import-*.md` 이고, `--archived` 를 주면 `archive/*.md.gz` 도 읽습니다. 프로젝트 폴더 안에서 실행하면 그 프로젝트만, 밖에서는 전부(`--all` 로 강제), `--project <이름>` 으로 하나를 지정합니다. `--since 7d`(또는 `YYYY-MM-DD`)는 날짜 로그 범위, `--regex` 는 정규식, `--limit`(기본 200)·`--json` 도 있습니다. 종료 코드 0=있음·1=없음·2=사용법 오류. 플러그인으로 설치했으면 `node "<플러그인 폴더>/search.mjs" …` 로 부릅니다. 출력 줄은 저장 때와 같은 마스킹을 거칩니다.
 
+### 주입 크기(0.10.0)
+
+세션 시작·프로젝트 언급 때 주입하는 것은 "색인"입니다: `STATUS.md`(최대 4,000자) + 트래커 요약 + 다른 세션 STATUS + 오늘 로그 꼬리 **15줄** + 어제 꼬리 **5줄**(로그 줄은 200자에서 자름), 전체 8,000자. 끝에 「더 필요한 기록」 절이 붙어 `search.mjs` 명령과 날짜 로그 경로를 알려 주고, 지시문도 "꼬리는 일부다, 더 필요하면 찾아라" 라고 말합니다. 크기는 설정 파일 `INJECT`(줄마다 `today=15`, `yday=5`, `line=200`, `total=8000`, `status=4000`) 또는 환경변수 `AUTO_HISTORY_INJECT`(`today=15,yday=5,…`, 파일보다 우선)로 바꿉니다. 0.9.x 까지는 40/20줄·10,000자였습니다.
+
 ### 트래커 페이지
 
 **사용자가** 직접 확인할 것들을 프로젝트마다 모아 두는 확인 페이지입니다(기능마다 카드 1장: 계정·메뉴 경로·할 일·정상 기준·AI 자체 검증, 그리고 판정 버튼 정상/문제/미확인과 메모).
@@ -187,6 +191,7 @@ API 키처럼 보이는 문자열(`AIza…`, `sk-…`, `ghp_…`, `Bearer …`, 
 |---|---|
 | `ROOT` / `AUTO_HISTORY_ROOT` | 경계 폴더(기본 `~/Projects`) |
 | `LANG` / `AUTO_HISTORY_LANG` | `en`(기본) 또는 `ko`: 주입 문구·STATUS 제목·머리말 언어 |
+| `INJECT` / `AUTO_HISTORY_INJECT` | 주입 크기: `today=15`, `yday=5`(줄), `line=200`, `total=8000`, `status=4000`(자). 파일은 줄마다, env 는 쉼표로 |
 | `RETENTION` / `AUTO_HISTORY_KEEP_DAYS`, `AUTO_HISTORY_ARCHIVE_DAYS`, `AUTO_HISTORY_SESSIONS_DAYS` | 줄 `keep=30`, `archive=365`, `sessions=7`(일). `keep=0` 로그 회전 끔, `archive=0` `.gz` 영구 보관, `sessions=0` 세션 사본 보존 |
 | `ALIASES` | `문구1\|문구2 => 루트기준\상대경로`, 한 줄에 대상 하나. `ALIASES.example` 참고 |
 | `INTERACTIVE_ENTRYPOINTS` | 대화형으로 볼 Claude 진입점(`cli`) |

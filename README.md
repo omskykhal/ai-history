@@ -127,6 +127,10 @@ Daily logs are kept as plain `YYYY-MM-DD.md` for 30 days. Older files are gzippe
 
 `node search.mjs <text>` scans the `.ai-history/` folders of the projects under the root line by line (no index, no database, no network): dated logs, `STATUS.md`, `sessions/*.md` and `cursor-import-*.md`, plus `archive/*.md.gz` with `--archived`. Run inside a project folder to search only that project; outside, every project (`--all` forces that); `--project <name>` picks one. `--since 7d` (or `YYYY-MM-DD`) limits the dated logs, `--regex` switches to a regular expression, and `--limit` (default 200) and `--json` are available. Exit code 0 = hits, 1 = none, 2 = usage error. From a plugin install call `node "<plugin folder>/search.mjs" …`. Output lines go through the same masking as the stored files.
 
+### Injection size (0.10.0)
+
+What is injected at session start or on a project mention is an index: `STATUS.md` (up to 4,000 chars) + the tracker summary + other sessions' STATUS + the last **15** lines of today's log + the last **5** of yesterday's (log lines cut at 200 chars), 8,000 chars in total. A "More history" section at the end names the `search.mjs` command and the dated log path, and the instruction says the tails are partial. Change the sizes with the conf file `INJECT` (one per line: `today=15`, `yday=5`, `line=200`, `total=8000`, `status=4000`) or the env var `AUTO_HISTORY_INJECT` (`today=15,yday=5,…`, which wins over the file). Up to 0.9.x this was 40/20 lines and 10,000 chars.
+
 ### Tracker page
 
 A per-project checklist page for the things **you** should check by hand (one card per feature: account, menu path, what to do, what "OK" looks like, the AI's own check, and your verdict buttons OK / Problem / Unchecked plus a note).
@@ -187,6 +191,7 @@ All files live next to the scripts (or in `AUTO_HISTORY_CONF_DIR`). Missing file
 |---|---|
 | `ROOT` / `AUTO_HISTORY_ROOT` | boundary folder (default `~/Projects`) |
 | `LANG` / `AUTO_HISTORY_LANG` | `en` (default) or `ko`: language of injected instructions, STATUS headings and header |
+| `INJECT` / `AUTO_HISTORY_INJECT` | injection sizes: `today=15`, `yday=5` (lines), `line=200`, `total=8000`, `status=4000` (chars). One per line in the file, comma-separated in the env var |
 | `RETENTION` / `AUTO_HISTORY_KEEP_DAYS`, `AUTO_HISTORY_ARCHIVE_DAYS`, `AUTO_HISTORY_SESSIONS_DAYS` | lines `keep=30`, `archive=365`, `sessions=7` (days). `keep=0` disables log rotation, `archive=0` keeps `.gz` forever, `sessions=0` keeps session copies |
 | `ALIASES` | `phrase1\|phrase2 => relative\path\under\root`, one target per line. See `ALIASES.example` |
 | `INTERACTIVE_ENTRYPOINTS` | Claude entrypoints treated as interactive (`cli`) |

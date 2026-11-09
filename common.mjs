@@ -704,24 +704,56 @@ export function hasAnchorSource(data, env = process.env) {
   return !!(st && st.anchor && inScope(st.anchor, env)) || !!(data && inScope(data.cwd, env));
 }
 
-// Reader body: STATUS.md (≤4,000 chars) + other sessions' STATUS (last 48h, newest 2, ≤1,000 chars each) + today's tail 40 lines + yesterday's tail 20 lines
-export const READER_TOTAL_MAX = 10000;
-const READER_STATUS_MAX = 4000;
+// Injection sizes (design A, 0.10.0): the session-start / mention reader is an index — STATUS first, log tails short — and the rest is read on demand
+// (search.mjs or the dated files). Defaults: today 15 lines, yesterday 5 lines, 200 chars per log line, 8,000 chars in total, STATUS 4,000 chars.
+// Override with <ConfDir>/INJECT (one key=value per line) or AUTO_HISTORY_INJECT ("today=15,yday=5,line=200,total=8000,status=4000"); env wins.
+export const INJECT_DEFAULTS = { today: 15, yday: 5, line: 200, total: 8000, status: 4000 };
+const INJECT_KEYS = Object.keys(INJECT_DEFAULTS);
+function parseInjectPairs(text) {
+  const out = {};
+  for (const tok of String(text || '').split(/[\r\n,;]+/)) {
+    const m = /^\s*([a-z]+)\s*=\s*(\d{1,6})\s*$/i.exec(tok);
+    if (!m) continue;
+    const k = m[1].toLowerCase();
+    if (INJECT_KEYS.includes(k)) out[k] = parseInt(m[2], 10);
+  }
+  return out;
+}
+export function injectLimits(env = process.env) {
+  const fromFile = parseInjectPairs((readListFile(path.join(getConfDir(env), 'INJECT')) || []).join('\n'));
+  const fromEnv = parseInjectPairs(env.AUTO_HISTORY_INJECT);
+  const lim = { ...INJECT_DEFAULTS, ...fromFile, ...fromEnv };
+  for (const k of INJECT_KEYS) if (!Number.isFinite(lim[k]) || lim[k] < 1) lim[k] = INJECT_DEFAULTS[k];
+  return lim;
+}
+export function readerTotalMax(env = process.env) { return injectLimits(env).total; }
+// Last n lines of a file, each cut to lineMax chars (… appended when cut). '' when missing.
+export function tailLinesCut(file, n, lineMax) {
+  const tail = tailLines(file, n);
+  if (!tail) return '';
+  return tail.split('\n').map((l) => (lineMax && l.length > lineMax ? l.slice(0, lineMax) + '…' : l)).join('\n');
+}
+export const READER_TOTAL_MAX = INJECT_DEFAULTS.total; // default; callers use readerTotalMax(env)
+export const SEARCH_TOOL = path.join(HOOK_DIR, 'search.mjs');
+// Reader body: STATUS.md (≤ status chars) + tracker section + other sessions' STATUS (last 48h, newest 2, ≤1,000 chars each) + today's / yesterday's tail (today / yday lines, line chars each) + pointer to search.mjs
 export function readerBody(anchor, env = process.env, opts = {}) {
   const L = t(env);
+  const lim = injectLimits(env);
   const hdir = historyDir(anchor, env);
   let status = '';
   try { status = fs.readFileSync(path.join(hdir, 'STATUS.md'), 'utf-8').replace(/\r\n/g, '\n'); } catch { /* none */ }
-  if (status.length > READER_STATUS_MAX) status = status.slice(0, READER_STATUS_MAX) + '\n' + L.truncated;
+  if (status.length > lim.status) status = status.slice(0, lim.status) + '\n' + L.truncated;
   const today = new Date();
   const yday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
-  const tToday = tailLines(path.join(hdir, `${ymd(today)}.md`), 40);
-  const tYday = tailLines(path.join(hdir, `${ymd(yday)}.md`), 20);
+  const tToday = tailLinesCut(path.join(hdir, `${ymd(today)}.md`), lim.today, lim.line);
+  const tYday = tailLinesCut(path.join(hdir, `${ymd(yday)}.md`), lim.yday, lim.line);
+  const name = path.basename(anchor);
   return `\n\n${L.readerStatus}\n${status || L.readerNoStatus}`
     + trackerReaderSection(anchor, env) // tracker section (only when TRACKER.json exists)
     + otherSessionsBody(anchor, env, opts.sid8)
-    + `\n\n${L.readerToday(ymd(today))}\n${tToday || L.readerNone}`
-    + `\n\n${L.readerYday(ymd(yday))}\n${tYday || L.readerNone}`;
+    + `\n\n${L.readerToday(ymd(today), lim.today)}\n${tToday || L.readerNone}`
+    + `\n\n${L.readerYday(ymd(yday), lim.yday)}\n${tYday || L.readerNone}`
+    + `\n\n${L.readerMore(`node "${SEARCH_TOOL}" <text> --project ${/\s/.test(name) ? `"${name}"` : name}`, historyDirName(env))}`;
 }
 
 // Multiple sessions in one folder: Stop writes STATUS.md (last writer) AND a per-session copy <history>/sessions/<agent>-<id8>.md.

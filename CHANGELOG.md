@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.10.0 — 2026-11-10
+
+- **Injection is an index now.** Session start and project mentions inject `STATUS.md` + tracker summary + other sessions + the last 15 lines of today's log and 5 of yesterday's (lines cut at 200 chars), 8,000 chars in total (was 40 / 20 lines and 10,000). A new "More history" section names the `search.mjs` command and the dated log path, and the instruction (ko/en) says the tails are partial. Sizes: conf file `INJECT` or `AUTO_HISTORY_INJECT` (`today`, `yday`, `line`, `total`, `status`; env wins). New exports `INJECT_DEFAULTS`, `injectLimits()`, `readerTotalMax()`, `tailLinesCut()`, `SEARCH_TOOL`; `READER_TOTAL_MAX` stays as the default value. Measured on the author's machine before the change: 16 projects, average 3,307 chars, maximum 10,942, four projects hit the old cap.
+- Tests: row 15 (i), row 10 (o) expects 8,000; run-tests 278 → 279.
+
 ## 0.9.0 — 2026-11-10
 
 - **Search.** `node search.mjs <text>` searches the history files of the projects under the root line by line: dated logs, `STATUS.md`, `sessions/*.md`, `cursor-import-*.md`, and `archive/*.md.gz` with `--archived`. Options `--project`, `--all`, `--since <YYYY-MM-DD|<n>d>`, `--regex`, `--limit`, `--json`; inside a project folder only that project is searched. No index, no database; output goes through the same masking as the stored files. Exit code 0 / 1 / 2 (hits / none / usage). The same file runs in the author's local hook set.

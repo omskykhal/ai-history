@@ -16,8 +16,9 @@ const STR = {
     lastWorker: (agent, t) => `마지막 작업자: ${agent}${t ? ` · 갱신 ${t}` : ''}`,
     readerStatus: '=== STATUS.md ===',
     readerNoStatus: '(STATUS.md 없음)',
-    readerToday: (d) => `=== 오늘 로그 꼬리(${d}, 최대 40줄) ===`,
-    readerYday: (d) => `=== 어제 로그 꼬리(${d}, 최대 20줄) ===`,
+    readerToday: (d, n = 15) => `=== 오늘 로그 꼬리(${d}, 최대 ${n}줄) ===`,
+    readerYday: (d, n = 5) => `=== 어제 로그 꼬리(${d}, 최대 ${n}줄) ===`,
+    readerMore: (cmd, dirname) => `=== 더 필요한 기록 ===\n위 꼬리는 일부다. 더 필요하면 ${cmd} 로 찾거나 ${dirname}/<날짜>.md 를 읽어라.`,
     readerNone: '(없음)',
     truncated: '…(생략)',
     sessionNoHistory: '[auto-history] 이 폴더의 히스토리 없음(신규). 첫 도구 실행부터 기록 시작.',
@@ -26,6 +27,7 @@ const STR = {
       + '`마지막 작업자` 줄이 있으면 `[현황]` 첫 줄에 마지막 작업자와 시각을 포함하라. '
       + '사용자의 첫 메시지에 구체적 지시가 있으면 보고 뒤에 그 지시를 수행하고, 인사나 빈 요청이면 보고 후 대기하라. '
       + '이전에 하던 미완료 작업은 사용자 지시 없이 재개하지 마라. '
+      + '아래 로그 꼬리는 일부다. 더 필요한 맥락은 끝의 검색 명령으로 찾거나 날짜 로그 파일을 읽어라. '
       + 'STATUS 에 `추천` 절이 있으면 `[현황]` 뒤에 그 항목을 선택지로 물어라(AskUserQuestion 을 쓸 수 있으면 그것으로, 아니면 번호 목록): 항목 하나씩 + 마지막 선택지 「다른 할 일」. 선택 전에는 시작하지 마라.',
     promptInstruction: (dirname, fmt) => '[auto-history] 도구를 1건 이상 사용한 응답은 **맨 끝**에 아래 블록을 그대로 출력하라'
       + `(대화만 한 짧은 턴은 생략 가능). 블록은 훅이 \`${dirname}/STATUS.md\`로 저장한다. `
@@ -187,8 +189,9 @@ const STR = {
     lastWorker: (agent, t) => `Last worker: ${agent}${t ? ` · updated ${t}` : ''}`,
     readerStatus: '=== STATUS.md ===',
     readerNoStatus: '(no STATUS.md)',
-    readerToday: (d) => `=== Today's log tail (${d}, last 40 lines) ===`,
-    readerYday: (d) => `=== Yesterday's log tail (${d}, last 20 lines) ===`,
+    readerToday: (d, n = 15) => `=== Today's log tail (${d}, last ${n} lines) ===`,
+    readerYday: (d, n = 5) => `=== Yesterday's log tail (${d}, last ${n} lines) ===`,
+    readerMore: (cmd, dirname) => `=== More history ===\nThe tails above are partial. For more, run ${cmd} or read ${dirname}/<date>.md.`,
     readerNone: '(none)',
     truncated: '…(truncated)',
     sessionNoHistory: '[auto-history] No history in this folder yet (new). Logging starts with the first tool call.',
@@ -197,6 +200,7 @@ const STR = {
       + 'If a `Last worker` line is present, include the last worker and time in the first `[Status]` line. '
       + "If the user's first message contains a concrete instruction, carry it out after the report; if it is a greeting or empty, wait after the report. "
       + 'Do not resume unfinished work without an explicit instruction from the user. '
+      + 'The log tails below are partial; for more context use the search command at the end or read the dated log files. '
       + 'If STATUS has a `Suggested` section, ask about its items after `[Status]` as a choice (with AskUserQuestion when available, else a numbered list): one option per item plus a last option "Something else". Do not start anything until the user picks.',
     promptInstruction: (dirname, fmt) => '[auto-history] Any reply in which you used at least one tool must END with the block below, verbatim '
       + `(a short conversation-only turn may omit it). A hook saves the block to \`${dirname}/STATUS.md\`. `
