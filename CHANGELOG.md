@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.8.0 — 2026-11-10
+
+Functionally the same as the author's local hook set again (only local configuration such as ALIASES differs). The plugin directory is no longer a constraint.
+
+- **Project mention, link words.** One link word may sit between the folder name and the keyword: Korean `라는`·`이라는`·`란`·`이란` after the name (`ai-test 라는 프로젝트 시작하자`), English `called`·`named` after the keyword (`project called ai-test`). Word boundaries and the depth-2 rule are unchanged. Tests: row 15 (a)–(c).
+- **STATUS block, optional `추천` / `Suggested` section.** A fifth heading after Progress: 0–3 lines on what would be good to do next given the context, written down only and never acted on. The template and the prompt instruction carry it; a block without it is still complete. On session start (and on a project mention) the agent is told to present those items in one line at the end of `[현황]` / `[Status]` and ask whether to proceed instead of starting them. Tests: row 15 (d)–(f).
+- **Account tool restored** (`tracker-cred.mjs`, `items[].check`, `kind: "cmd"`; the 0.6.1 removal is reverted). It was removed only because the plugin directory flagged it; the directory listing is not pursued since 0.7.0, so the distributed copy carries it again. Test fixtures keep the neutral user name.
+- README (en / ko): mention rule, STATUS sample and the Suggested paragraph.
+- Tests: run-tests 266 → 277 (row 14 account tests back, row 15 new), agent 92, cursor 23.
+
 ## 0.7.0 — 2026-11-09
 
 The plugin carries its hooks again and is distributed only through this repository's own marketplace.
