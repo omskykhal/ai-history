@@ -250,7 +250,7 @@ fs.mkdirSync(path.join(pkg, '.ai-history'), { recursive: true });
 const gmid = '01a0e9d1-1111-7531-bfcb-c2bddd3882e5';
 run('session-start.mjs', g({ source: 'new' }, gmid, pkg), [], { ...baseEnv, CLAUDE_PROJECT_DIR: mono });
 run('session-start.mjs', g({ source: 'load' }, gmid, pkg), [], { ...baseEnv, CLAUDE_PROJECT_DIR: mono });
-check('Grok 재개: 저장소 루트로 안 바뀜', JSON.parse(fs.readFileSync(sp(gmid).json, 'utf-8')).anchor.endsWith('\\pkg'), fs.readFileSync(sp(gmid).json, 'utf-8'));
+check('Grok 재개: 저장소 루트로 안 바뀜', JSON.parse(fs.readFileSync(sp(gmid).json, 'utf-8')).anchor.endsWith(path.sep + 'pkg'), fs.readFileSync(sp(gmid).json, 'utf-8'));
 
 const ka = project('kimia', true);
 const kb2 = project('kimib', true);
@@ -305,8 +305,9 @@ check('경로 판정: 400자에서 잘린 경로는 버림', mp(cutText) === nul
 check('경로 판정: 없는 하위 폴더+한글 이름은 상위 폴더 자체로 보지 않음', mp(`${path.join(pgrp, '새폴더')} 봐줘`) === 'pgrp:false', mp(`${path.join(pgrp, '새폴더')} 봐줘`));
 check('경로 판정: 이름 언급 함수는 그대로(경로 안 이름 무시)', C.matchProjectMention(`${pa} 열어줘`, [], pfolders, []) === null);
 
-check('/c/ 절대 경로 트래커 판정(회귀)', C.isTrackerChangeTool({ tool_name: 'Write', cwd: 'C:\\Users\\me', tool_input: { file_path: '/c/Users/me/Desktop/Project/x/a.ts' } }, 'c:\\users\\me\\desktop\\project\\x', baseEnv));
-check('상대 경로 트래커 판정', C.isTrackerChangeTool({ tool_name: 'Write', cwd: 'C:\\Users\\me\\Desktop\\Project\\x', tool_input: { path: 'src/a.ts' } }, 'c:\\users\\me\\desktop\\project\\x', baseEnv));
+const TW = process.platform === 'win32'; // Windows paths on win32, POSIX twins elsewhere
+check('/c/ 절대 경로 트래커 판정(회귀)', C.isTrackerChangeTool({ tool_name: 'Write', cwd: TW ? 'C:\\Users\\me' : '/home/me', tool_input: { file_path: TW ? '/c/Users/me/Desktop/Project/x/a.ts' : '/home/me/Projects/x/a.ts' } }, TW ? 'c:\\users\\me\\desktop\\project\\x' : '/home/me/Projects/x', baseEnv));
+check('상대 경로 트래커 판정', C.isTrackerChangeTool({ tool_name: 'Write', cwd: TW ? 'C:\\Users\\me\\Desktop\\Project\\x' : '/home/me/Projects/x', tool_input: { path: 'src/a.ts' } }, TW ? 'c:\\users\\me\\desktop\\project\\x' : '/home/me/Projects/x', baseEnv));
 
 // ---- 순수 함수·회귀
 check('재개 명령', C.resumeCommand('abc', 'grok') === 'grok --resume abc' && C.resumeCommand('session_abc', 'kimi') === 'kimi -S session_abc' && C.resumeCommand('abc', 'cursor') === '' && C.resumeCommand('abc', 'codex') === 'codex resume abc' && C.resumeCommand('abc', 'claude') === 'claude --resume abc');

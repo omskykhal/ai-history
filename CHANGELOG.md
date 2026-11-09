@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.10.1 — 2026-11-10
+
+- Tests only: the suites pass on Linux as well. Cases whose expectations were Windows paths (boundary cases in row 1, the case-insensitive cwd, the path-in-prompt case, the checklist anchors, the tracker change detection, the Cursor slug, the Grok anchor suffix) now have POSIX twins chosen by `process.platform`. Hook code unchanged. Linux: plugin install, the six hooks and a `claude -p` e2e run were verified on 2026-11-10; the suite there was 250/279, 89/92, 21/23 before this change.
+
 ## 0.10.0 — 2026-11-10
 
 - **Injection is an index now.** Session start and project mentions inject `STATUS.md` + tracker summary + other sessions + the last 15 lines of today's log and 5 of yesterday's (lines cut at 200 chars), 8,000 chars in total (was 40 / 20 lines and 10,000). A new "More history" section names the `search.mjs` command and the dated log path, and the instruction (ko/en) says the tails are partial. Sizes: conf file `INJECT` or `AUTO_HISTORY_INJECT` (`today`, `yday`, `line`, `total`, `status`; env wins). New exports `INJECT_DEFAULTS`, `injectLimits()`, `readerTotalMax()`, `tailLinesCut()`, `SEARCH_TOOL`; `READER_TOTAL_MAX` stays as the default value. Measured on the author's machine before the change: 16 projects, average 3,307 chars, maximum 10,942, four projects hit the old cap.
