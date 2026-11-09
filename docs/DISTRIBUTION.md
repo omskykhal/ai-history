@@ -94,7 +94,7 @@ Install
 
 Why not the Anthropic plugin directory: it currently accepts command hooks and script files only from verified organizations, so this ships from its own marketplace.
 
-Limits (honest): tested on Windows; macOS/Linux path code exists but is untested. The one-line marketplace install was validated but not yet exercised on a second machine. Logs older than 30 days are gzipped.
+Limits (honest): tested on Windows and Linux (plugin install, hooks, e2e); macOS path code exists but is untested. Headless `claude -p` logs tools only. Logs older than 30 days are gzipped.
 
 MIT. Feedback welcome, especially from macOS/Linux users.
 https://github.com/omskykhal/ai-history
@@ -120,7 +120,7 @@ ai-history — Claude Code·Codex·Grok·Kimi·Cursor 가 프로젝트마다 하
 
 Anthropic 플러그인 디렉터리에 없는 이유: 현재 command 훅과 스크립트 파일을 인증된 조직에만 허용해서, 자체 마켓플레이스로 배포합니다.
 
-한계(솔직하게): Windows 에서 검증. macOS/Linux 경로 코드는 있지만 미검증. 마켓플레이스 한 줄 설치는 형식 검증만 통과했고 다른 PC 실측은 아직입니다. 30일 지난 로그는 gzip 보관.
+한계(솔직하게): Windows 와 Linux 에서 검증(플러그인 설치·훅·e2e). macOS 경로 코드는 있지만 미검증. 헤드리스 `claude -p` 는 도구 로그만 남깁니다. 30일 지난 로그는 gzip 보관.
 
 MIT. 특히 macOS/Linux 사용자의 피드백을 기다립니다.
 https://github.com/omskykhal/ai-history
