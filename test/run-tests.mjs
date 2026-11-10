@@ -53,7 +53,7 @@ function reset() {
     fs.mkdirSync(dir, { recursive: true });
     for (const [n, c] of Object.entries(files)) fs.writeFileSync(path.join(dir, n), c);
   };
-  mk(CONF, { INTERACTIVE_ENTRYPOINTS: 'cli\n' });
+  mk(CONF, { INTERACTIVE_ENTRYPOINTS: 'cli\n', TRACKER_ON: '' }); // TRACKER_ON keeps the 0.10 tracker rule for the existing tracker tests (0.11.0 default is off)
   mk(CONF_SDKTS, { INTERACTIVE_ENTRYPOINTS: 'cli\nsdk-ts\n' });
   mk(CONF_NESTED, { INTERACTIVE_ENTRYPOINTS: 'cli\n', NESTED_MARKERS: 'AH_NESTED_TEST=1\n' });
   mk(CONF_NOBLOCK, { INTERACTIVE_ENTRYPOINTS: 'cli\n', NO_BLOCK: '' });
@@ -1726,7 +1726,7 @@ async function row12() {
   const postT = (sid, a, tool, input, extra = {}, env = baseEnv(sid)) => run('post-tool.mjs', { session_id: sid, cwd: a, tool_name: tool, tool_input: input, duration_ms: 5, ...extra }, env);
   const mkConf = (name, files) => { const d = path.join(SCRATCH, name); fs.mkdirSync(d, { recursive: true }); for (const [n, c] of Object.entries(files)) fs.writeFileSync(path.join(d, n), c); return d; };
   const CONF_TOFF = mkConf('conf-tracker-off', { INTERACTIVE_ENTRYPOINTS: 'cli\n', TRACKER_OFF: '' });
-  const CONF_TSINCE = mkConf('conf-tracker-since', { INTERACTIVE_ENTRYPOINTS: 'cli\n', TRACKER_SINCE: '# 시험\n2026-09-01\n' });
+  const CONF_TSINCE = mkConf('conf-tracker-since', { INTERACTIVE_ENTRYPOINTS: 'cli\n', TRACKER_ON: '', TRACKER_SINCE: '# 시험\n2026-09-01\n' });
   const ITEM = { id: 'A-1', area: 'A', title: '이메일 로그인', account: 'test@x.com / Pass1234!', path: '상단 「로그인」', todo: '「로그인」 누르기', expect: '대시보드 이동', ai: { status: 'ok', note: 'live 200' } };
 
   // (a) trackerEligibility: 없음→new / SINCE 이전 로그→legacy / gz 만 있어도 legacy / json on·off / TRACKER_OFF / TRACKER_SINCE 파일
@@ -2065,8 +2065,8 @@ async function row15() {
   // (d) STATUS 형식: 5번째 절 추천/Suggested, 4절 블록은 누락 아님
   {
     const fk = C.statusFormatFor(KO); const fe = C.statusFormatFor(EN);
-    const okK = /## 진행도\n- \(1~5줄\)\n## 추천\n- \(0~3줄/.test(fk) && fk.endsWith('<!-- STATUS:END -->');
-    const okE = /## Progress\n- \(1-5 lines\)\n## Suggested\n- \(0-3 lines/.test(fe) && fe.endsWith('<!-- STATUS:END -->');
+    const okK = /## 진행도\n- \(1~5줄\)\n## 추천\n- \(1~3줄/.test(fk) && fk.endsWith('<!-- STATUS:END -->');
+    const okE = /## Progress\n- \(1-5 lines\)\n## Suggested\n- \(1-3 lines/.test(fe) && fe.endsWith('<!-- STATUS:END -->');
     const m4k = C.missingHeadings('## 하던 일\n- a\n## 한 일\n- b\n## 다음 할 일\n- c\n## 진행도\n- d', KO);
     const m5k = C.missingHeadings('## 하던 일\n- a\n## 한 일\n- b\n## 다음 할 일\n- c\n## 진행도\n- d\n## 추천\n- e', KO);
     const m4e = C.missingHeadings('## Working on\n- a\n## Done\n- b\n## Next\n- c\n## Progress\n- d', EN);
@@ -2081,10 +2081,10 @@ async function row15() {
     const pk = tk.promptInstruction('.ai-history', C.statusFormatFor(KO)); const pe = te.promptInstruction('.ai-history', C.statusFormatFor(EN));
     const CHOICE_KO = /선택지로 물어라\(AskUserQuestion 을 쓸 수 있으면 그것으로, 아니면 번호 목록\): (?:추천 )?항목 하나씩 \+ 마지막 선택지 「다른 할 일」\. 선택 전에는 (?:실행|시작)하지 마라/;
     const CHOICE_EN = /as a choice \(with AskUserQuestion when available, else a numbered list\): one option per item plus a last option "Something else"\. Do (?:nothing|not start anything) until the user picks/;
-    const ok = /`추천` 절에는 문맥 흐름상 다음에 하면 좋은 일을 0~3줄로 적되, 지시받지 않은 일은 적기만 하고 실행하지 마라/.test(pk) && CHOICE_KO.test(pk)
+    const ok = /`추천` 절에는 문맥 흐름상 다음에 하면 좋은 일을 1~3줄로 반드시 적되.*지시받지 않은 일은 적기만 하고 실행하지 마라/.test(pk) && CHOICE_KO.test(pk)
       && /STATUS 에 `추천` 절이 있으면 `\[현황\]` 뒤에/.test(tk.sessionInstruction) && CHOICE_KO.test(tk.sessionInstruction)
       && /`추천` 절이 있으면 `\[현황\]` 뒤에/.test(tk.mentionRecorded('X', 'C:\\x')) && CHOICE_KO.test(tk.mentionRecorded('X', 'C:\\x'))
-      && /Under `Suggested`, write 0-3 lines/.test(pe) && /do not act on anything you were not asked to do/.test(pe) && CHOICE_EN.test(pe)
+      && /Under `Suggested`, always write 1-3 lines/.test(pe) && /do not act on anything you were not asked to do/.test(pe) && CHOICE_EN.test(pe)
       && /If STATUS has a `Suggested` section, ask about its items after `\[Status\]`/.test(te.sessionInstruction) && CHOICE_EN.test(te.sessionInstruction)
       && CHOICE_EN.test(te.mentionRecorded('X', 'C:\\x'));
     rec(15, '(e) 추천 지시문 ko/en', 'prompt·session·mention 지시문 3종에 추천/Suggested 규칙 + 선택지 질문(항목별 + 「다른 할 일」/"Something else")', `ok=${ok}`, ok);
@@ -2154,6 +2154,42 @@ async function row15() {
     rec(15, '(i) 주입 크기 상한·INJECT 설정·꼬리 절단·검색 안내', '기본 15/5/200/8000/4000·파일 today=3 line=50·env 우선 today=2 total=7000·꼬리 2줄·줄 60자+…·안내 절·지시문 ko/en',
       `def=${okDef} file=${okFile} env=${okEnv} tail=${okTail}(${tailLines.length}/${tailLines[1] ? tailLines[1].length : 0}) more=${okMore} ins=${okIns}`,
       okDef && okFile && okEnv && okTail && okMore && okIns);
+  }
+  // (j) 트래커 기본 꺼짐(0.11.0): TRACKER_ON 없으면 off(default-off)·힌트는 세션당 1회·{"mode":"on"} 블록으로 켜짐·--config --tracker on|off|default 왕복·--status trackerDefault
+  {
+    const mkConfJ = (name, files) => { const d = path.join(SCRATCH, name); fs.mkdirSync(d, { recursive: true }); for (const [n, c] of Object.entries(files)) fs.writeFileSync(path.join(d, n), c); return d; };
+    const confP = mkConfJ('conf-plain-15j', { INTERACTIVE_ENTRYPOINTS: 'cli\n' });
+    const ctxOf = (out) => { try { return JSON.parse(out).hookSpecificOutput.additionalContext || ''; } catch { return ''; } };
+    const a = P('p15j'); fs.mkdirSync(path.join(a, HD), { recursive: true }); fs.writeFileSync(path.join(a, HD, `${today()}.md`), '- x\n');
+    const e0 = C.trackerEligibility(a, { AUTO_HISTORY_CONF_DIR: confP });
+    const eOn = C.trackerEligibility(a, { AUTO_HISTORY_CONF_DIR: CONF });
+    const sid = sidNew(); const envJ = baseEnv(sid, { AUTO_HISTORY_CONF_DIR: confP });
+    run('session-start.mjs', { session_id: sid, source: 'startup', cwd: a }, envJ);
+    const p1 = ctxOf(run('prompt-submit.mjs', { session_id: sid, cwd: a, prompt: '첫 요청' }, envJ).out);
+    const p2 = ctxOf(run('prompt-submit.mjs', { session_id: sid, cwd: a, prompt: '둘째 요청' }, envJ).out);
+    const hint = (s) => /트래커\(사용자 확인 페이지\)가 꺼져 있다/.test(s);
+    arm(sid);
+    const onBlock = '<!-- TRACKER:BEGIN -->\n{"mode":"on"}\n<!-- TRACKER:END -->';
+    run('stop.mjs', { session_id: sid, cwd: a, transcript_path: '', stop_hook_active: false, last_assistant_message: `켭니다.\n${onBlock}\n${block('J')}` }, envJ);
+    const e1 = C.trackerEligibility(a, { AUTO_HISTORY_CONF_DIR: confP });
+    const p3 = ctxOf(run('prompt-submit.mjs', { session_id: sid, cwd: a, prompt: '셋째 요청' }, envJ).out);
+    const instOn = /TRACKER:BEGIN/.test(p3) && /"items"/.test(p3) && !hint(p3);
+    // --config --tracker
+    const confQ = mkConfJ('conf-tracker-15j', { INTERACTIVE_ENTRYPOINTS: 'cli\n' });
+    const envQ = baseEnv(sidNew(), { AUTO_HISTORY_CONF_DIR: confQ });
+    const st = (o) => { try { return JSON.parse(o).trackerDefault || ''; } catch { return ''; } };
+    const c1 = run('install.mjs', '', envQ, ['--config', '--tracker', 'on']); const s1 = st(run('install.mjs', '', envQ, ['--status']).out);
+    const f1 = fs.existsSync(path.join(confQ, 'TRACKER_ON')) && !fs.existsSync(path.join(confQ, 'TRACKER_OFF'));
+    run('install.mjs', '', envQ, ['--config', '--tracker', 'off']); const s2 = st(run('install.mjs', '', envQ, ['--status']).out);
+    const f2 = !fs.existsSync(path.join(confQ, 'TRACKER_ON')) && fs.existsSync(path.join(confQ, 'TRACKER_OFF'));
+    run('install.mjs', '', envQ, ['--config', '--tracker', 'default']); const s3 = st(run('install.mjs', '', envQ, ['--status']).out);
+    const f3 = !fs.existsSync(path.join(confQ, 'TRACKER_ON')) && !fs.existsSync(path.join(confQ, 'TRACKER_OFF'));
+    const bad = run('install.mjs', '', envQ, ['--config', '--tracker', 'maybe']);
+    const ok = e0.mode === 'off' && e0.reason === 'default-off' && eOn.mode === 'new'
+      && hint(p1) && !hint(p2) && e1.mode === 'on' && e1.reason === 'json' && instOn
+      && c1.code === 0 && f1 && /TRACKER_ON/.test(s1) && f2 && /TRACKER_OFF/.test(s2) && f3 && /default/.test(s3) && bad.code !== 0;
+    rec(15, '(j) 트래커 기본 꺼짐·힌트 1회·켜기 블록·--tracker 설정', 'plain conf → off/default-off, TRACKER_ON → new / 힌트 1회만 / {"mode":"on"} → on(json)·다음 요청에 블록 지시 / --tracker on·off·default 파일 왕복·status 문구·잘못된 값 거부',
+      `e0=${e0.mode}/${e0.reason} eOn=${eOn.mode} hint=${hint(p1)}/${hint(p2)} e1=${e1.mode}/${e1.reason} instOn=${instOn} files=${f1}/${f2}/${f3} status=${s1}|${s2}|${s3} bad=${bad.code}`, ok);
   }
   // (g) 기존 1~14행 전부 통과
   {

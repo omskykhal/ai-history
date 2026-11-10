@@ -32,8 +32,14 @@ runHook(async () => {
   const r = resolveAnchor(data, env, { allowSwitch: !data.agent_id, mentioned: hit ? hit.dir : null, unrecorded: !!(hit && hit.recorded === false) });
   if (!r) return;
 
+  // Tracker instruction for this anchor. The "tracker is off" hint goes out once per session (default-off since 0.11.0); the on-instruction every prompt.
+  const elig = trackerEligibility(r.anchor, env);
+  let tIns = trackerInstruction(elig, elig.json, AGENT, r.anchor, env);
+  const offHint = !!tIns && tIns === L.trackerOffHint;
+  if (offHint && r.state && r.state.trackerHintAt) tIns = '';
   if (r.state && !data.agent_id) {
-    writeState(data.session_id, { ...r.state, agent: AGENT, promptAt: new Date().toISOString(), blockedAt: null, trackerBlockedAt: null, publishAskedAt: null }, env);
+    writeState(data.session_id, { ...r.state, agent: AGENT, promptAt: new Date().toISOString(), blockedAt: null, trackerBlockedAt: null, publishAskedAt: null,
+      trackerHintAt: offHint ? (r.state.trackerHintAt || new Date().toISOString()) : (r.state.trackerHintAt || null) }, env);
     removeFile(statePaths(data.session_id, env).tool);
     removeFile(statePaths(data.session_id, env).tracker); // tracker marker has the same lifetime as .tool
   }
@@ -47,8 +53,6 @@ runHook(async () => {
   // non-interactive / sub-agent / no state → log only
   if (!r.state || !interactive) return;
   // tracker instruction after the STATUS instruction (omitted when empty)
-  const elig = trackerEligibility(r.anchor, env);
-  const tIns = trackerInstruction(elig, elig.json, AGENT, r.anchor, env);
   const instruction = tIns ? `${INSTRUCTION}\n\n${tIns}` : INSTRUCTION;
   let mentionReader = '';
   // Inject the Reader only when the named project became the anchor with this prompt (if it already was, instruction only)

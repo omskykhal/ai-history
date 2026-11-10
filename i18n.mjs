@@ -11,7 +11,7 @@ const STR = {
     headings: ['하던 일', '한 일', '다음 할 일', '진행도'],
     optionalHeadings: ['추천'],
     lines: '(1~5줄)',
-    optionalLines: '(0~3줄, 문맥상 다음에 하면 좋은 일·권할 만한 일. 적기만 하고 실행하지 않는다)',
+    optionalLines: '(1~3줄, 문맥상 다음에 하면 좋은 일·권할 만한 일. 마땅한 것이 없으면 가장 가까운 다음 단계를 적는다. 적기만 하고 실행하지 않는다)',
     statusHead: { session: '세션', author: '작성', updated: '갱신', anchor: '앵커', resume: '재개' },
     lastWorker: (agent, t) => `마지막 작업자: ${agent}${t ? ` · 갱신 ${t}` : ''}`,
     readerStatus: '=== STATUS.md ===',
@@ -32,7 +32,7 @@ const STR = {
     promptInstruction: (dirname, fmt) => '[auto-history] 도구를 1건 이상 사용한 응답은 **맨 끝**에 아래 블록을 그대로 출력하라'
       + `(대화만 한 짧은 턴은 생략 가능). 블록은 훅이 \`${dirname}/STATUS.md\`로 저장한다. `
       + '블록 본문에 추측성 표현을 쓰지 말고 확인된 사실만 적어라. 각 제목 아래 1~5줄, 한국어. '
-      + '`추천` 절에는 문맥 흐름상 다음에 하면 좋은 일을 0~3줄로 적되, 지시받지 않은 일은 적기만 하고 실행하지 마라. 추천 항목을 적었으면 같은 응답에서 그 항목을 선택지로 물어라(AskUserQuestion 을 쓸 수 있으면 그것으로, 아니면 번호 목록): 추천 항목 하나씩 + 마지막 선택지 「다른 할 일」. 선택 전에는 실행하지 마라.\n' + fmt,
+      + '`추천` 절에는 문맥 흐름상 다음에 하면 좋은 일을 1~3줄로 반드시 적되(마땅한 것이 없으면 가장 가까운 다음 단계), 지시받지 않은 일은 적기만 하고 실행하지 마라. 추천 항목을 적었으면 같은 응답에서 그 항목을 선택지로 물어라(AskUserQuestion 을 쓸 수 있으면 그것으로, 아니면 번호 목록): 추천 항목 하나씩 + 마지막 선택지 「다른 할 일」. 선택 전에는 실행하지 마라.\n' + fmt,
     mentionUnrecorded: (name, dir) => `[auto-history] 요청에 언급된 프로젝트 \`${name}\`(\`${dir}\`)에는 아직 기록이 없다. 이 프로젝트 작업은 \`${dir}\` 기준으로 하라. `
       + "첫 줄을 `[현황]`으로 시작해 '이 프로젝트의 기록은 아직 없음(새로 시작)'을 한 줄로 알린 뒤 이번 요청을 수행하라.",
     mentionRecorded: (name, dir) => `[auto-history] 요청에 언급된 프로젝트 \`${name}\`(\`${dir}\`)의 최근 기록이다. `
@@ -184,7 +184,7 @@ const STR = {
     headings: ['Working on', 'Done', 'Next', 'Progress'],
     optionalHeadings: ['Suggested'],
     lines: '(1-5 lines)',
-    optionalLines: '(0-3 lines: what would be good to do next given the context; write it down, do not act on it)',
+    optionalLines: '(1-3 lines: what would be good to do next given the context; if nothing stands out, the nearest next step. Write it down, do not act on it)',
     statusHead: { session: 'Session', author: 'Author', updated: 'Updated', anchor: 'Anchor', resume: 'Resume' },
     lastWorker: (agent, t) => `Last worker: ${agent}${t ? ` · updated ${t}` : ''}`,
     readerStatus: '=== STATUS.md ===',
@@ -205,7 +205,7 @@ const STR = {
     promptInstruction: (dirname, fmt) => '[auto-history] Any reply in which you used at least one tool must END with the block below, verbatim '
       + `(a short conversation-only turn may omit it). A hook saves the block to \`${dirname}/STATUS.md\`. `
       + 'Write only verified facts, no speculation. 1-5 lines under each heading. '
-      + 'Under `Suggested`, write 0-3 lines on what would be good to do next given the context; write it down, do not act on anything you were not asked to do. If you wrote any Suggested items, ask about them in the same reply as a choice (with AskUserQuestion when available, else a numbered list): one option per item plus a last option "Something else". Do nothing until the user picks.\n' + fmt,
+      + 'Under `Suggested`, always write 1-3 lines on what would be good to do next given the context (the nearest next step if nothing stands out); write it down, do not act on anything you were not asked to do. If you wrote any Suggested items, ask about them in the same reply as a choice (with AskUserQuestion when available, else a numbered list): one option per item plus a last option "Something else". Do nothing until the user picks.\n' + fmt,
     mentionUnrecorded: (name, dir) => `[auto-history] The project \`${name}\` (\`${dir}\`) mentioned in the request has no history yet. Work on this project relative to \`${dir}\`. `
       + "Start with a `[Status]` line saying 'no history for this project yet (starting fresh)', then carry out the request.",
     mentionRecorded: (name, dir) => `[auto-history] Recent history of the project \`${name}\` (\`${dir}\`) mentioned in the request. `

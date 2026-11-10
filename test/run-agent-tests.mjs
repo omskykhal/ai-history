@@ -14,6 +14,7 @@ const state = path.join(box, 'state');
 const conf = path.join(box, 'conf');
 const kimiHome = path.join(box, 'kimi');
 for (const d of [root, state, conf, kimiHome]) fs.mkdirSync(d, { recursive: true });
+fs.writeFileSync(path.join(conf, 'TRACKER_ON'), 'on\n'); // 0.11.0: tracker is off by default; these tests exercise the on-path
 const baseEnv = { ...hostEnv(), AUTO_HISTORY_LANG: 'ko', AUTO_HISTORY_ROOT: root, AUTO_HISTORY_STATE_DIR: state, AUTO_HISTORY_CONF_DIR: conf, AUTO_HISTORY_KIMI_HOME: kimiHome };
 for (const k of Object.keys(baseEnv)) if (/^(CLAUDE|GROK_)/.test(k) || k === 'AUTO_HISTORY_DISABLE') delete baseEnv[k];
 

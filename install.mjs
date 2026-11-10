@@ -7,7 +7,7 @@
 //   node install.mjs --grok-hooks | --grok-hooks-remove [--grok-file <path>] [--dry-run]         Grok session start hook (other events come from --install)
 //   node install.mjs --git-ignore [--dry-run]                                                  add ".ai-history/" to git's global excludes file
 //   node install.mjs --migrate-dirname [--root <dir>] [--dry-run]                              rename legacy .claude-history → .ai-history (depth ≤ 2)
-//   node install.mjs --config [--root <dir>] [--lang en|ko] [--keep-days N] [--archive-days N] [--sessions-days N]
+//   node install.mjs --config [--root <dir>] [--lang en|ko] [--tracker on|off|default] [--keep-days N] [--archive-days N] [--sessions-days N]
 //                                                                                               write ROOT / LANG / RETENTION conf files only
 //   node install.mjs --status                                                                   show the resolved configuration
 import fs from 'node:fs';
@@ -129,6 +129,18 @@ function applyConfig(args, dry) {
     if (!LANGS.includes(v)) throw new Error(`--lang must be one of: ${LANGS.join(', ')}`);
     out.lang = v;
     if (!dry) out.langFile = writeConf('LANG', v);
+  }
+  // TRACKER default: on = TRACKER_ON file (tracker on for new projects), off = TRACKER_OFF file (off everywhere), default = neither (off until asked)
+  if (args.includes('--tracker')) {
+    const tv = argVal(args, '--tracker');
+    const v = tv ? tv.toLowerCase() : '';
+    if (!['on', 'off', 'default'].includes(v)) throw new Error('--tracker must be one of: on, off, default');
+    out.tracker = v;
+    if (!dry) {
+      for (const n of ['TRACKER_ON', 'TRACKER_OFF']) { try { fs.rmSync(path.join(getConfDir(), n)); } catch { /* none */ } }
+      if (v === 'on') out.trackerFile = writeConf('TRACKER_ON', 'on');
+      if (v === 'off') out.trackerFile = writeConf('TRACKER_OFF', 'off');
+    }
   }
   // RETENTION (keep / archive / sessions, days; 0 = off). Unspecified keys keep their current (file or default) value.
   const retArgs = [['--keep-days', 'keep'], ['--archive-days', 'archive'], ['--sessions-days', 'sessions']];
@@ -288,6 +300,7 @@ function status(settingsFile, codexFile) {
     root: getRoot(), rootSource: process.env.AUTO_HISTORY_ROOT ? 'env' : has(path.join(confDir, 'ROOT')) ? 'ROOT file' : `default (${DEFAULT_ROOT})`,
     lang: resolveLang(), historyDirName: historyDirName(),
     retention: retentionPolicy(), retentionSource: has(path.join(confDir, 'RETENTION')) ? 'RETENTION file (+env)' : 'default (+env)',
+    trackerDefault: has(path.join(confDir, 'TRACKER_OFF')) ? 'off everywhere (TRACKER_OFF)' : has(path.join(confDir, 'TRACKER_ON')) ? 'on for new projects (TRACKER_ON)' : 'off until asked (default)',
     aliasesFile: has(path.join(confDir, 'ALIASES')), noBlock: has(path.join(confDir, 'NO_BLOCK')), noBlockCodex: has(path.join(confDir, 'NO_BLOCK_CODEX')),
     claudeSettings: settingsFile, claudeHooksRegistered: countOurs(settingsFile),
     codexHooksFile: codexFile, codexHooksRegistered: countOurs(codexFile),
@@ -416,7 +429,7 @@ function main() {
     '  --grok-hooks | --grok-hooks-remove [--grok-file <path>] [--dry-run]',
     '  --git-ignore [--dry-run]',
     '  --migrate-dirname [--root <dir>] [--dry-run]',
-    '  --config [--root <dir>] [--lang en|ko] [--keep-days N] [--archive-days N] [--sessions-days N]',
+    '  --config [--root <dir>] [--lang en|ko] [--tracker on|off|default] [--keep-days N] [--archive-days N] [--sessions-days N]',
     '  --status',
   ].join('\n'));
   return undefined;

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.11.0 — 2026-11-10
+
+- **Tracker page is off by default.** New projects no longer get the tracker automatically; it turns on per project when the user asks ("turn the tracker on" → the agent outputs the `{"mode":"on"}` block, as before for older projects). While off, the "tracker is off" hint is injected once per session instead of on every prompt. A `TRACKER_ON` file in the conf dir restores the 0.10 rule (auto-on for histories starting on/after `TRACKER_SINCE`); `node install.mjs --config --tracker on|off|default` writes/removes `TRACKER_ON` / `TRACKER_OFF`, and `--status` reports `trackerDefault`. Projects that already have `TRACKER.json` are unaffected. Basis: on the author's machine 3 of 16 projects used the tracker; similar tools have no equivalent feature (research 2026-11-10).
+- **`추천` / `Suggested` is now 1-3 lines, not 0-3.** The agent always proposes at least one next step (the nearest one when nothing stands out) and asks about it as a choice, so the interview never silently disappears. Instruction text and template only; a block without the section is still complete.
+- README (en / ko): tracker section, settings table, Suggested paragraph. Tests: row 15 (j); the existing tracker tests run with `TRACKER_ON` in their conf dir. run-tests 279 → 280.
+
 ## 0.10.3 — 2026-11-10
 
 - Tests only, third Linux pass (Linux after 0.10.2: run-tests 272/279, agent 92/92, cursor 22/23): the alias expectation in row 7 (ba) uses `path.join`, and the Cursor normalisation check strips the leading `/` of the workspace-root URI only on Windows. Hook code unchanged. Linux after this change: run-tests 279/279, agent 92/92, cursor 23/23 — the suites pass on both platforms; README platform wording updated.

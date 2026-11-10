@@ -98,7 +98,7 @@ After any reply in which the agent used a tool, it is instructed to end with:
 <!-- STATUS:END -->
 ```
 
-`Suggested` is optional: 0-3 lines on what would be good to do next given the context. The agent writes it down and does not act on anything it was not asked to do. In the reply that writes them and after `[Status]` in the next session, the agent asks about those items as a choice (AskUserQuestion when available, else a numbered list): one option per item plus a last option "Something else". Nothing starts until the user picks. A block without this section still counts as complete.
+`Suggested` holds 1-3 lines on what would be good to do next given the context (the nearest next step if nothing stands out). The agent writes it down and does not act on anything it was not asked to do. In the reply that writes them and after `[Status]` in the next session, the agent asks about those items as a choice (AskUserQuestion when available, else a numbered list): one option per item plus a last option "Something else". Nothing starts until the user picks. A block without this section still counts as complete.
 
 The `Stop` hook extracts it and writes `STATUS.md` with a header (`Session`, `Author: <agent> (<id>)`, `Updated`, `Anchor`, `Resume: claude --resume <id>` or `Resume: codex resume <id>`). When the session ends (`/exit`, `/clear`, logout), the `SessionEnd` hook logs `[exit] session end(reason=prompt_input_exit) resume: claude --resume <id>` and adds the `Resume` line to this session's `STATUS.md` / `sessions/` copy if it is missing, so the command to continue the session stays in the history. If the block is missing, the hook asks **once** for it (`decision: block`), never when the stop was caused by a context limit, an interruption, an auth error, a scheduled wake-up, or when context is ≥95% full. Disable the nudge with a `NO_BLOCK` file (Claude) / `NO_BLOCK_CODEX` file (Codex) in the conf dir, or `AUTO_HISTORY_NO_BLOCK=1`.
 
@@ -138,8 +138,8 @@ A per-project checklist page for the things **you** should check by hand (one ca
 - **What**: `.ai-history/TRACKER.json` is the source of truth; `.ai-history/tracker/index.html` is built from `tracker-template.html` (no external scripts or fonts, light/dark, phone layout). Page labels follow `AUTO_HISTORY_LANG` (`en` / `ko`).
 - **When**: if a turn created or edited files under the project (or ran a build / deploy / create command), the agent is asked to end its reply with a TRACKER block right before the STATUS block. The `Stop` hook merges it (upsert by `id`, `remove`, auto areas, limits: 300 items, 600 chars per field) and rebuilds the HTML. If the block is missing it asks once (combined with the STATUS nudge, one block per turn).
 - **Publishing** (Claude Code only): when the HTML changed, Claude is asked once to publish it as a private claude.ai Artifact with the `db` and `user` capabilities and to reply with `{"url":"https://claude.ai/artifact/<id>"}`, which is stored. Your verdicts and notes on the page are stored in the Artifact's shared db (`checks/<id>`, `notes`); without it they stay in that browser only. At the next session start Claude is asked to read them once and report them in `[Status]`. Codex merges blocks and builds the HTML but is never asked to publish.
-- **Which projects**: on for projects whose history starts on or after `2026-10-27` (or that have no history yet); older projects stay off until you ask to turn it on (`{"mode":"on"}`). `{"mode":"off"}` turns it off for one project.
-- **Turn off / tune**: a `TRACKER_OFF` file in the conf dir turns it off everywhere (blocks are ignored, nothing is injected). A `TRACKER_SINCE` file (first `YYYY-MM-DD` line) moves the cut-off date.
+- **Which projects (off by default since 0.11.0)**: every project stays off until you ask ("turn the tracker on") and the agent outputs the `{"mode":"on"}` block. While off, a one-line "tracker is off, ask to turn it on" hint is injected once per session. A `TRACKER_ON` file in the conf dir restores the 0.10 rule (on for projects whose history starts on or after `2026-10-27`, or that have no history yet). `{"mode":"off"}` turns it off for one project. Projects that already have a `TRACKER.json` follow that file's mode, so nothing changes for them.
+- **Turn off / tune**: a `TRACKER_OFF` file in the conf dir turns it off everywhere (blocks are ignored, nothing is injected). `node install.mjs --config --tracker on|off|default` writes and removes the `TRACKER_ON` / `TRACKER_OFF` files. A `TRACKER_SINCE` file (first `YYYY-MM-DD` line) is the cut-off date used with `TRACKER_ON`.
 
 Block format (every key optional; `{"items":[]}` = no change):
 
@@ -199,7 +199,8 @@ All files live next to the scripts (or in `AUTO_HISTORY_CONF_DIR`). Missing file
 | `NESTED_MARKERS`, `NESTED_MARKERS_CODEX` | `ENV=value` lines; a match means "nested run" → log only |
 | `DUMP_INPUTS`, `DUMP_INPUTS_CODEX` | presence dumps masked hook inputs to `dumps/` (debugging) |
 | `TRACKER_OFF` | presence turns the tracker page off for every project |
-| `TRACKER_SINCE` | first `YYYY-MM-DD` line: projects whose history starts earlier keep the tracker off until asked (default `2026-10-27`) |
+| `TRACKER_ON` | presence turns the tracker on automatically for new projects (the 0.10 rule). Without it the default is off; ask per project ("turn the tracker on") |
+| `TRACKER_SINCE` | with `TRACKER_ON`, first `YYYY-MM-DD` line: projects whose history starts earlier keep the tracker off until asked (default `2026-10-27`) |
 | `AUTO_HISTORY_DIRNAME` | history folder name (default `.ai-history`) |
 | `AUTO_HISTORY_DISABLE=1` | turn everything off for that process (e.g. a daemon) |
 | `AUTO_HISTORY_STATE_DIR` | per-session state files (default `state/` in the conf dir) |

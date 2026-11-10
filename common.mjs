@@ -1174,6 +1174,9 @@ export function trackerEligibility(anchor, env = process.env) {
   const json = readTracker(anchor, env);
   if (confFileExists('TRACKER_OFF', env)) return { mode: 'off', reason: 'TRACKER_OFF', json, anchor };
   if (json) return { mode: json.mode === 'off' ? 'off' : 'on', reason: 'json', json, anchor };
+  // Default since 0.11.0: off until the user asks ("turn the tracker on" → {"mode":"on"} block). A TRACKER_ON file in the conf dir
+  // restores the earlier rule (on for projects whose history starts on/after TRACKER_SINCE, legacy otherwise).
+  if (!confFileExists('TRACKER_ON', env)) return { mode: 'off', reason: 'default-off', json: null, anchor };
   const since = trackerSince(env);
   const first = earliestHistoryDate(anchor, env);
   if (first && first < since) return { mode: 'legacy', reason: `history ${first} < ${since}`, json: null, anchor };
