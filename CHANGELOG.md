@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.11.2 — 2026-11-10
+
+- Symlinked project folders (and Windows junctions) under the root are listed like real folders: they show up for name mentions, candidate folders and the history list. Before, `readdir` filtered them out with `isDirectory()`, so a project that was a link could only be reached by opening a session inside it.
+- **Exit summary.** `SessionEnd` now logs the Working on / Next bullets of the session's STATUS (up to 2 each) as `[exit] <heading>: …` lines right above the `[exit] … resume: claude --resume <id>` line, so the daily log shows what the session was doing when it ended. Tests: rows 15 (l) and (m), run-tests 281 → 283.
+
 ## 0.11.1 — 2026-11-10
 
 - The injected text, log tags and search output now say `[ai-history]` instead of `[auto-history]` (32 places: i18n, common, prompt-submit, session-start, search; the Cursor echo guard and tests follow). `auto-history` was the author's local hook set the plugin was generalized from; the product name is ai-history. The `mdCredToolHidden` placeholder and the tracker-test skill text use the new name too. No behaviour change; stored files are unaffected (the tag never appears in the log lines or STATUS.md).

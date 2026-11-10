@@ -1548,7 +1548,7 @@ async function main() {
     {
       const before = statusOf(aB);
       const r = run('session-end.mjs', { session_id: sB, cwd: aB, reason: 'prompt_input_exit', hook_event_name: 'SessionEnd' }, baseEnv(sB));
-      const exitLine = logOf(aB).trimEnd().split('\n').filter((l) => l.includes('[exit]'));
+      const exitLine = logOf(aB).trimEnd().split('\n').filter((l) => /\[exit\] (?:종료|session end|STATUS)/.test(l));
       rec(11, '(c) SessionEnd /exit → 로그', '[exit] 종료(reason=prompt_input_exit) 재개: claude --resume <sid>·보강 로그 없음·STATUS 불변·무출력',
         `lines=${JSON.stringify(exitLine.map(stripTime))} same=${statusOf(aB) === before} out=${JSON.stringify(r.out)} state=${fs.existsSync(stateFile(sB))}`,
         exitLine.length === 1 && exitLine[0].endsWith(`[${sB.slice(0, 8)}][claude] [exit] 종료(reason=prompt_input_exit) 재개: claude --resume ${sB}`)
@@ -1608,7 +1608,7 @@ async function main() {
       run('stop.mjs', { session_id: sc, cwd: a, last_assistant_message: `끝\n${block('CX')}` }, cxEnv(sc), CX);
       const s = statusOf(a) || '';
       run('session-end.mjs', { session_id: sc, cwd: a, hook_event_name: 'SessionEnd' }, cxEnv(sc), CX);
-      const exitLine = logOf(a).trimEnd().split('\n').filter((l) => l.includes('[exit]'));
+      const exitLine = logOf(a).trimEnd().split('\n').filter((l) => /\[exit\] (?:종료|session end|STATUS)/.test(l));
       rec(11, '(g) codex 재개 명령', 'STATUS 재개: codex resume <sid>·사본 동일·로그 [id8][codex] [exit] 종료 재개: codex resume <sid>(reason 없음 → 괄호 없음)',
         `status=${resumeLineOf(s)} copy=${resumeLineOf(readF(sessFile(a, sc, 'codex')))} exit=${JSON.stringify(exitLine.map(stripTime))}`,
         resumeLineOf(s) === `재개: codex resume ${sc}` && resumeLineOf(readF(sessFile(a, sc, 'codex'))) === `재개: codex resume ${sc}`
@@ -1672,7 +1672,7 @@ async function main() {
       run('stop.mjs', { session_id: sc, cwd: a, last_assistant_message: `done\n${blk}` }, enEnv, CX);
       const s = statusOf(a) || '';
       const r = run('session-end.mjs', { session_id: sc, cwd: a, reason: 'prompt_input_exit' }, enEnv, CX);
-      const exitLine = logOf(a).trimEnd().split('\n').filter((l) => l.includes('[exit]'));
+      const exitLine = logOf(a).trimEnd().split('\n').filter((l) => /\[exit\] (?:종료|session end|STATUS)/.test(l));
       // 영어 구형 머리(Resume 없음) → upsertStatusResume 이 Anchor 다음에 Resume 줄 삽입, 두 번째 호출은 변경 없음
       const f = path.join(SCRATCH, 'r19k-old-status.md');
       fs.writeFileSync(f, `# STATUS\nSession: ${sc.slice(0, 8)}\nAuthor: codex (${sc.slice(0, 8)})\nUpdated: 2026-10-01 00:00:00\nAnchor: ${a}\n\n## Working on\n- old\n`);
@@ -2213,6 +2213,33 @@ async function row15() {
       && /Do not ask about the Suggested items in this reply/.test(eO) && /If you wrote any Suggested items, ask about them/.test(eA) && /suggestion prompts are off/.test(eS)
       && /1~3줄로 반드시 적되/.test(pO) && /always write 1-3 lines/.test(eO);
     rec(15, '(k) SUGGEST_ASK always/start/off', '기본 always·파일 off·env start 우선·잘못된 값 always / off: 턴·세션·언급 질문 문장 제거+묻지 마라 / start: 턴만 제거 / 작성 의무는 유지', `modes=${m0},${mF},${mE},${mB},${mX} ok=${ok}`, ok);
+  }
+  // (l) 심링크 프로젝트(0.11.2): 루트 아래 디렉터리 심링크(Windows 는 정션)도 목록·이름 언급·후보 폴더에 포함
+  {
+    const tgt = P('p15l-target'); fs.mkdirSync(path.join(tgt, HD), { recursive: true }); fs.writeFileSync(path.join(tgt, HD, 'STATUS.md'), '# STATUS\n세션: a\n\n## 하던 일\n- 심링크 표지\n');
+    const link = P('p15l-link'); let linked = true;
+    try { fs.symlinkSync(tgt, link, process.platform === 'win32' ? 'junction' : 'dir'); } catch (e) { linked = false; }
+    const envL = { AUTO_HISTORY_ROOT: TEST_ROOT };
+    const names = C.listHistoryProjects(envL).map((p) => p.name);
+    const cand = C.listCandidateFolders(envL).map((p) => p.name);
+    const hit = C.matchProjectMention('p15l-link 프로젝트 이어서', C.listHistoryProjects(envL), C.listCandidateFolders(envL), []);
+    const ok = linked && names.includes('p15l-link') && names.includes('p15l-target') && cand.includes('p15l-link') && !!hit && hit.name === 'p15l-link' && C.inScope(link, envL);
+    rec(15, '(l) 심링크 프로젝트 목록·언급', '링크·대상 둘 다 목록에, 후보 폴더에, "<링크> 프로젝트" 언급 일치, inScope', `linked=${linked} names=${names.includes('p15l-link')}/${names.includes('p15l-target')} cand=${cand.includes('p15l-link')} hit=${hit ? hit.name : null}`, ok);
+  }
+  // (m) 종료 요약(0.11.2): [exit] 종료 줄 바로 위에 이 세션 STATUS 의 하던 일·다음 할 일 불릿이 [exit] <제목>: … 로 남음
+  {
+    const a = P('p15m'); const sid = startSession(a); arm(sid);
+    const blk = ['<!-- STATUS:BEGIN -->', '## 하던 일', '- 결제 웹훅 재시도 로직', '- 서명 검사 미들웨어 이동', '- 세 번째는 생략', '## 한 일', '- 테스트 3개', '## 다음 할 일', '- 지수 백오프', '## 진행도', '- 41/41', '<!-- STATUS:END -->'].join('\n');
+    run('stop.mjs', { session_id: sid, cwd: a, transcript_path: '', stop_hook_active: false, last_assistant_message: `완료.\n${blk}` }, baseEnv(sid));
+    run('session-end.mjs', { session_id: sid, cwd: a, reason: 'prompt_input_exit' }, baseEnv(sid));
+    const ls = logOf(a).split('\n').filter(Boolean);
+    const iW1 = ls.findIndex((l) => /\[exit\] 하던 일: 결제 웹훅 재시도 로직$/.test(l));
+    const iW2 = ls.findIndex((l) => /\[exit\] 하던 일: 서명 검사 미들웨어 이동$/.test(l));
+    const iN = ls.findIndex((l) => /\[exit\] 다음 할 일: 지수 백오프$/.test(l));
+    const iX = ls.findIndex((l) => /\[exit\] 종료\(reason=prompt_input_exit\) 재개: claude --resume /.test(l));
+    const third = ls.some((l) => /세 번째는 생략/.test(l) && /\[exit\]/.test(l));
+    const ok = iW1 >= 0 && iW2 === iW1 + 1 && iN === iW2 + 1 && iX === iN + 1 && !third;
+    rec(15, '(m) 종료 요약 줄', '하던 일 2줄(최대 2)·다음 할 일 1줄이 순서대로, 바로 다음 줄이 [exit] 종료…재개', `idx=${iW1},${iW2},${iN},${iX} third=${third}`, ok);
   }
   // (g) 기존 1~14행 전부 통과
   {

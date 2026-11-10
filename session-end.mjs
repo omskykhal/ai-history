@@ -5,7 +5,7 @@
 import path from 'node:path';
 import {
   runHook, readInput, hookEnv, readState, inScope, normalizeWinPath, historyDir, appendLog, maybeDump,
-  resumeCommand, upsertStatusResume, sessionStatusPath, oneLine, mask, t, AGENT, kimiLateCapture,
+  resumeCommand, upsertStatusResume, sessionStatusPath, oneLine, mask, t, AGENT, kimiLateCapture, exitSummaryLines,
 } from './common.mjs';
 
 runHook(async () => {
@@ -22,6 +22,8 @@ runHook(async () => {
   const reason = typeof data.reason === 'string' && data.reason.trim() ? oneLine(mask(data.reason), 40) : '';
   const L = t(env);
 
+  // what the session was doing, right above the resume line (from this session's STATUS: working on / next)
+  for (const s of exitSummaryLines(anchor, sid8, env)) appendLog(anchor, data, L.logExitSummary(s.label, oneLine(mask(s.text), 160)), env);
   appendLog(anchor, data, L.logExit(reason, cmd), env);
   if (cmd) {
     const changed = [

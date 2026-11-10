@@ -502,6 +502,8 @@ export function resolveAnchor(data, env = process.env, opts = {}) {
 
 // Projects with history: depth-1 and depth-2 folders under the root that contain <history dir>/STATUS.md.
 // Dot-folders and node_modules are skipped. [] on any error.
+// A symlink (or Windows junction) that points at a directory counts as a project folder too (0.11.2): the session cwd and the name mention both use the link path.
+const isDirLink = (p) => { try { return fs.statSync(p).isDirectory(); } catch { return false; } };
 export function listHistoryProjects(env = process.env) {
   const out = [];
   try {
@@ -509,7 +511,7 @@ export function listHistoryProjects(env = process.env) {
     const skip = (n) => n.startsWith('.') || n.toLowerCase() === 'node_modules';
     const dirs = (dir) => {
       try {
-        return fs.readdirSync(dir, { withFileTypes: true }).filter((d) => d.isDirectory() && !skip(d.name)).map((d) => d.name);
+        return fs.readdirSync(dir, { withFileTypes: true }).filter((d) => (d.isDirectory() || (d.isSymbolicLink() && isDirLink(path.join(dir, d.name)))) && !skip(d.name)).map((d) => d.name);
       } catch {
         return [];
       }
@@ -540,7 +542,7 @@ export function listCandidateFolders(env = process.env) {
     const skip = (n) => n.startsWith('.') || n.toLowerCase() === 'node_modules' || n === '__t';
     const dirs = (dir) => {
       try {
-        return fs.readdirSync(dir, { withFileTypes: true }).filter((d) => d.isDirectory() && !skip(d.name)).map((d) => d.name);
+        return fs.readdirSync(dir, { withFileTypes: true }).filter((d) => (d.isDirectory() || (d.isSymbolicLink() && isDirLink(path.join(dir, d.name)))) && !skip(d.name)).map((d) => d.name);
       } catch {
         return [];
       }
@@ -969,6 +971,39 @@ export function statusHeader(sid, anchor, env = process.env, agent = AGENT) {
 // (another session owns it). Keys of every language are recognized; the line is written with the active language's key. Returns whether it changed.
 const RESUME_LINE_RE = new RegExp(`^(?:${RESUME_KEYS.map(escRe).join('|')}): `);
 const ANCHOR_LINE_RE = new RegExp(`^(?:${ANCHOR_KEYS.map(escRe).join('|')}): `);
+// Session-end summary (0.11.2): bullets of the "working on" and "next" sections of this session's STATUS (sessions/ copy, else STATUS.md
+// when its header names this session), written to the log right before the [exit] line so the resume command can be read in context.
+export function exitSummaryLines(anchor, sid8, env = process.env, maxPerSection = 2) {
+  const files = [sessionStatusPath(anchor, sid8, env), path.join(historyDir(anchor, env), 'STATUS.md')];
+  let text = null;
+  for (const f of files) {
+    try {
+      const s = fs.readFileSync(f, 'utf-8').replace(/\r\n/g, '\n');
+      const m = HEAD_SID_RE.exec(headOf(s));
+      if (m && m[1] === sid8) { text = s; break; }
+    } catch { /* next candidate */ }
+  }
+  if (!text) return [];
+  const lines = text.split('\n');
+  const out = [];
+  for (const set of ALL_HEADINGS) {
+    for (const idx of [0, 2]) { // working on, next
+      const h = set[idx];
+      const start = lines.findIndex((l) => l.trim() === `## ${h}`);
+      if (start < 0) continue;
+      let n = 0;
+      for (let i = start + 1; i < lines.length && n < maxPerSection; i++) {
+        const l = lines[i];
+        if (/^## /.test(l)) break;
+        const b = /^\s*-\s+(.+?)\s*$/.exec(l);
+        if (!b || /^\(.*\)$/.test(b[1])) continue; // skip template placeholders like "(1~5줄)"
+        out.push({ label: h, text: b[1] }); n++;
+      }
+    }
+    if (out.length) break; // one language set is enough
+  }
+  return out;
+}
 export function upsertStatusResume(file, sid8, cmd, env = process.env) {
   try {
     if (!cmd || !fs.existsSync(file)) return false;

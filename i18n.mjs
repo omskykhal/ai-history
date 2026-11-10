@@ -66,6 +66,7 @@ const STR = {
     logRetention: (a, d, s) => `[retention] 압축 ${a}·gz 삭제 ${d}·세션 사본 삭제 ${s}`,
     logExit: (reason, cmd) => `[exit] 종료${reason ? `(reason=${reason})` : ''}${cmd ? ` 재개: ${cmd}` : ''}`,
     logExitFixed: '[exit] STATUS 재개 줄 보강',
+    logExitSummary: (label, text) => `[exit] ${label}: ${text}`,
     // tracker page (§20)
     trackerFormat: [
       '<!-- TRACKER:BEGIN -->',
@@ -241,6 +242,7 @@ const STR = {
     logRetention: (a, d, s) => `[retention] archived ${a} · gz deleted ${d} · session copies deleted ${s}`,
     logExit: (reason, cmd) => `[exit] session end${reason ? `(reason=${reason})` : ''}${cmd ? ` resume: ${cmd}` : ''}`,
     logExitFixed: '[exit] STATUS resume line added',
+    logExitSummary: (label, text) => `[exit] ${label}: ${text}`,
     // tracker page (§20)
     trackerFormat: [
       '<!-- TRACKER:BEGIN -->',
