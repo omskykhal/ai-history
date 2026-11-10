@@ -20,16 +20,16 @@ export const SEARCH_LINE_MAX = 300;
 
 const STR = {
   ko: {
-    header: (q, hits, files, projects) => `[auto-history] "${q}" — ${hits}건 / 파일 ${files}개 / 프로젝트 ${projects}개`,
-    none: (q) => `[auto-history] "${q}" — 일치하는 줄 없음`,
+    header: (q, hits, files, projects) => `[ai-history] "${q}" — ${hits}건 / 파일 ${files}개 / 프로젝트 ${projects}개`,
+    none: (q) => `[ai-history] "${q}" — 일치하는 줄 없음`,
     truncated: (limit) => `… ${limit}건까지만 표시(--limit 로 조정)`,
     usage: '사용법: node search.mjs <검색어> [--regex] [--project <이름>] [--all] [--since <YYYY-MM-DD|N d>] [--archived] [--limit <n>] [--root <폴더>] [--json]',
     badRegex: (m) => `정규식 오류: ${m}`,
     noProject: (name) => `프로젝트 "${name}" 을(를) 루트에서 찾지 못함`,
   },
   en: {
-    header: (q, hits, files, projects) => `[auto-history] "${q}" — ${hits} hits in ${files} files, ${projects} projects`,
-    none: (q) => `[auto-history] "${q}" — no matching lines`,
+    header: (q, hits, files, projects) => `[ai-history] "${q}" — ${hits} hits in ${files} files, ${projects} projects`,
+    none: (q) => `[ai-history] "${q}" — no matching lines`,
     truncated: (limit) => `… showing the first ${limit} hits (--limit changes this)`,
     usage: 'Usage: node search.mjs <text> [--regex] [--project <name>] [--all] [--since <YYYY-MM-DD|<n>d>] [--archived] [--limit <n>] [--root <dir>] [--json]',
     badRegex: (m) => `Bad regular expression: ${m}`,

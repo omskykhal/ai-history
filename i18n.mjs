@@ -6,6 +6,16 @@ import path from 'node:path';
 export const LANGS = ['en', 'ko'];
 export const DEFAULT_LANG = 'en';
 
+// Suggested-section interview sentences (SUGGEST_ASK: always | start | off)
+const KO_ASK_START = 'STATUS 에 `추천` 절이 있으면 `[현황]` 뒤에 그 항목을 선택지로 물어라(AskUserQuestion 을 쓸 수 있으면 그것으로, 아니면 번호 목록): 항목 하나씩 + 마지막 선택지 「다른 할 일」. 선택 전에는 시작하지 마라.';
+const KO_NO_ASK_START = 'STATUS 에 `추천` 절이 있어도 묻지 말고 `[현황]` 끝에 한 줄로만 옮겨 적어라(추천 질문 꺼짐).';
+const KO_ASK_TURN = '추천 항목을 적었으면 같은 응답에서 그 항목을 선택지로 물어라(AskUserQuestion 을 쓸 수 있으면 그것으로, 아니면 번호 목록): 추천 항목 하나씩 + 마지막 선택지 「다른 할 일」. 선택 전에는 실행하지 마라.';
+const KO_NO_ASK_TURN = '추천 항목은 이 응답에서 묻지 말고 적기만 하라.';
+const EN_ASK_START = 'If STATUS has a `Suggested` section, ask about its items after `[Status]` as a choice (with AskUserQuestion when available, else a numbered list): one option per item plus a last option "Something else". Do not start anything until the user picks.';
+const EN_NO_ASK_START = 'If STATUS has a `Suggested` section, do not ask about it; restate it in one line at the end of `[Status]` (suggestion prompts are off).';
+const EN_ASK_TURN = 'If you wrote any Suggested items, ask about them in the same reply as a choice (with AskUserQuestion when available, else a numbered list): one option per item plus a last option "Something else". Do nothing until the user picks.';
+const EN_NO_ASK_TURN = 'Do not ask about the Suggested items in this reply; just write them down.';
+
 const STR = {
   ko: {
     headings: ['하던 일', '한 일', '다음 할 일', '진행도'],
@@ -21,26 +31,28 @@ const STR = {
     readerMore: (cmd, dirname) => `=== 더 필요한 기록 ===\n위 꼬리는 일부다. 더 필요하면 ${cmd} 로 찾거나 ${dirname}/<날짜>.md 를 읽어라.`,
     readerNone: '(없음)',
     truncated: '…(생략)',
-    sessionNoHistory: '[auto-history] 이 폴더의 히스토리 없음(신규). 첫 도구 실행부터 기록 시작.',
-    sessionIntro: (anchor) => `[auto-history] 이 폴더(${anchor})의 이전 작업 기록입니다. `,
+    sessionNoHistory: '[ai-history] 이 폴더의 히스토리 없음(신규). 첫 도구 실행부터 기록 시작.',
+    sessionIntro: (anchor) => `[ai-history] 이 폴더(${anchor})의 이전 작업 기록입니다. `,
     sessionInstruction: '첫 답변의 첫 줄을 `[현황]`으로 시작해 하던 일·어디까지 했는지·다음 할 일을 3~8줄로 보고하라. '
       + '`마지막 작업자` 줄이 있으면 `[현황]` 첫 줄에 마지막 작업자와 시각을 포함하라. '
       + '사용자의 첫 메시지에 구체적 지시가 있으면 보고 뒤에 그 지시를 수행하고, 인사나 빈 요청이면 보고 후 대기하라. '
       + '이전에 하던 미완료 작업은 사용자 지시 없이 재개하지 마라. '
       + '아래 로그 꼬리는 일부다. 더 필요한 맥락은 끝의 검색 명령으로 찾거나 날짜 로그 파일을 읽어라. '
-      + 'STATUS 에 `추천` 절이 있으면 `[현황]` 뒤에 그 항목을 선택지로 물어라(AskUserQuestion 을 쓸 수 있으면 그것으로, 아니면 번호 목록): 항목 하나씩 + 마지막 선택지 「다른 할 일」. 선택 전에는 시작하지 마라.',
-    promptInstruction: (dirname, fmt) => '[auto-history] 도구를 1건 이상 사용한 응답은 **맨 끝**에 아래 블록을 그대로 출력하라'
+      + KO_ASK_START,
+    askSuggestStart: KO_ASK_START,
+    noAskSuggestStart: KO_NO_ASK_START,
+    promptInstruction: (dirname, fmt, ask = 'always') => '[ai-history] 도구를 1건 이상 사용한 응답은 **맨 끝**에 아래 블록을 그대로 출력하라'
       + `(대화만 한 짧은 턴은 생략 가능). 블록은 훅이 \`${dirname}/STATUS.md\`로 저장한다. `
       + '블록 본문에 추측성 표현을 쓰지 말고 확인된 사실만 적어라. 각 제목 아래 1~5줄, 한국어. '
-      + '`추천` 절에는 문맥 흐름상 다음에 하면 좋은 일을 1~3줄로 반드시 적되(마땅한 것이 없으면 가장 가까운 다음 단계), 지시받지 않은 일은 적기만 하고 실행하지 마라. 추천 항목을 적었으면 같은 응답에서 그 항목을 선택지로 물어라(AskUserQuestion 을 쓸 수 있으면 그것으로, 아니면 번호 목록): 추천 항목 하나씩 + 마지막 선택지 「다른 할 일」. 선택 전에는 실행하지 마라.\n' + fmt,
-    mentionUnrecorded: (name, dir) => `[auto-history] 요청에 언급된 프로젝트 \`${name}\`(\`${dir}\`)에는 아직 기록이 없다. 이 프로젝트 작업은 \`${dir}\` 기준으로 하라. `
+      + '`추천` 절에는 문맥 흐름상 다음에 하면 좋은 일을 1~3줄로 반드시 적되(마땅한 것이 없으면 가장 가까운 다음 단계), 지시받지 않은 일은 적기만 하고 실행하지 마라. ' + (ask === 'always' ? KO_ASK_TURN : KO_NO_ASK_TURN) + '\n' + fmt,
+    mentionUnrecorded: (name, dir) => `[ai-history] 요청에 언급된 프로젝트 \`${name}\`(\`${dir}\`)에는 아직 기록이 없다. 이 프로젝트 작업은 \`${dir}\` 기준으로 하라. `
       + "첫 줄을 `[현황]`으로 시작해 '이 프로젝트의 기록은 아직 없음(새로 시작)'을 한 줄로 알린 뒤 이번 요청을 수행하라.",
-    mentionRecorded: (name, dir) => `[auto-history] 요청에 언급된 프로젝트 \`${name}\`(\`${dir}\`)의 최근 기록이다. `
+    mentionRecorded: (name, dir, ask = 'always') => `[ai-history] 요청에 언급된 프로젝트 \`${name}\`(\`${dir}\`)의 최근 기록이다. `
       + '첫 줄 `[현황]`으로 3~8줄 보고 후 이번 요청을 수행하라. `마지막 작업자` 줄이 있으면 `[현황]` 첫 줄에 마지막 작업자와 시각을 포함하라. '
       + `이 프로젝트 작업은 \`${dir}\` 기준으로 하라. 미완료 작업은 지시 없이 재개하지 마라. `
-      + 'STATUS 에 `추천` 절이 있으면 `[현황]` 뒤에 그 항목을 선택지로 물어라(AskUserQuestion 을 쓸 수 있으면 그것으로, 아니면 번호 목록): 항목 하나씩 + 마지막 선택지 「다른 할 일」. 선택 전에는 시작하지 마라.',
-    blockReason: (fmt) => `[auto-history] 이번 응답에 상태 블록이 없습니다. 아래 형식의 블록만 출력하고 종료하세요:\n${fmt}`,
-    sessionStatusReminder: (fmt) => `[auto-history] 도구를 1건 이상 사용한 응답은 맨 끝에 아래 블록을 그대로 출력하라. 각 제목 아래 1~5줄, 한국어, 확인된 사실만.\n${fmt}`,
+      + (ask === 'off' ? KO_NO_ASK_START : KO_ASK_START),
+    blockReason: (fmt) => `[ai-history] 이번 응답에 상태 블록이 없습니다. 아래 형식의 블록만 출력하고 종료하세요:\n${fmt}`,
+    sessionStatusReminder: (fmt) => `[ai-history] 도구를 1건 이상 사용한 응답은 맨 끝에 아래 블록을 그대로 출력하라. 각 제목 아래 1~5줄, 한국어, 확인된 사실만.\n${fmt}`,
     readerDelivered: '이 기록을 방금 전달받았다. 위 지시대로 `[현황]`을 보고하라.',
     logAnchorSet: (a) => `[anchor] 지정 ${a}`,
     logAnchorChange: (o, n) => `[anchor] 변경 ${o}→${n}`,
@@ -68,17 +80,17 @@ const STR = {
       + '모든 키는 선택이며 items 는 id 기준 upsert(없는 필드는 기존 값 유지), 없어진 항목은 remove 에 id, 변경이 없으면 {"items":[]}. '
       + 'AI 가 직접 검증한 결과는 items[].ai {"status":"ok|fail|-","note":"근거"} 로 적는다. '
       + '`[현황]`·완료 보고에는 사용자 판정 수치를 그대로 쓰고, 사용자가 ok 로 판정하지 않은 항목을 완료라 하지 마라.',
-    trackerOn: (dirname, file, fmt, rules) => '[auto-history] 이 프로젝트는 트래커(사용자 확인 페이지)가 켜져 있다. 이번 턴에 파일 생성·수정·빌드·배포를 했으면 응답 끝 STATUS 블록 **바로 앞**에 아래 TRACKER 블록(JSON 1개)을 출력하라. '
+    trackerOn: (dirname, file, fmt, rules) => '[ai-history] 이 프로젝트는 트래커(사용자 확인 페이지)가 켜져 있다. 이번 턴에 파일 생성·수정·빌드·배포를 했으면 응답 끝 STATUS 블록 **바로 앞**에 아래 TRACKER 블록(JSON 1개)을 출력하라. '
       + `훅이 \`${dirname}/${file}\` 에 병합하고 페이지 HTML 을 만든다. 사용자가 직접 확인할 기능마다 항목 1개.\n${fmt}\n${rules}`,
-    trackerOffHint: '[auto-history] 이 프로젝트는 트래커(사용자 확인 페이지)가 꺼져 있다. 사용자가 "트래커 켜줘" 류로 요청할 때만 응답 끝 STATUS 블록 바로 앞에 '
+    trackerOffHint: '[ai-history] 이 프로젝트는 트래커(사용자 확인 페이지)가 꺼져 있다. 사용자가 "트래커 켜줘" 류로 요청할 때만 응답 끝 STATUS 블록 바로 앞에 '
       + '`<!-- TRACKER:BEGIN -->` / `{"mode":"on"}` / `<!-- TRACKER:END -->` 세 줄 블록을 출력해 켠다.',
-    trackerBlockReason: (beforeStatus, fmt, rules) => '[auto-history] 이번 턴에 파일 생성·수정·빌드가 있었는데 TRACKER 블록이 없습니다. 아래 형식의 TRACKER 블록'
+    trackerBlockReason: (beforeStatus, fmt, rules) => '[ai-history] 이번 턴에 파일 생성·수정·빌드가 있었는데 TRACKER 블록이 없습니다. 아래 형식의 TRACKER 블록'
       + `(변경 없음이면 {"items":[]})을 출력하세요${beforeStatus ? '(STATUS 블록 바로 앞)' : ''}:\n${fmt}\n${rules}`,
-    publishHead: '[auto-history] 트래커 HTML 이 갱신되었습니다. 지금 발행하세요.',
+    publishHead: '[ai-history] 트래커 HTML 이 갱신되었습니다. 지금 발행하세요.',
     publishFirst: (file, title) => `- 처음(url 없음): artifact-capabilities 스킬을 로드한 뒤 Artifact publish — file_path "${file}", icon "checklist", title "${title}", capabilities {"db":{},"user":{}}. 발행 뒤 ArtifactData list \`checks\` 1회로 db 동작 확인.`,
     publishExisting: (url) => `- 이미 url 있음${url ? `(현재 ${url})` : ''}: 이 세션에서 그 url 을 아직 읽거나 발행하지 않았으면 Artifact read(url) 먼저. 그 다음 같은 file_path + url 로 publish(capabilities 생략). 거부되고 최신본이 오면 그 본문을 쓰지 말고 같은 파일로 1회 재시도(원본은 TRACKER.json).`,
     publishAfter: '- 발행 뒤 아래만 출력하고 종료:',
-    trackerDbRead: (url, mdTool, trackerFile) => `[auto-history] 이 프로젝트의 트래커 페이지: ${url} . 답하기 전에 ArtifactData \`list\` 로 컬렉션 \`checks\` 와 \`notes\` 를 **1회** 읽어 `
+    trackerDbRead: (url, mdTool, trackerFile) => `[ai-history] 이 프로젝트의 트래커 페이지: ${url} . 답하기 전에 ArtifactData \`list\` 로 컬렉션 \`checks\` 와 \`notes\` 를 **1회** 읽어 `
       + '`[현황]` 에 `사용자 판정 ok N·fail N·미확인 N·새 메모 N` 을 넣고, fail 항목과 메모는 내용 그대로 보고하라. '
       + '읽은 판정은 응답 끝 TRACKER 블록 `items[].user` 로 돌려보내라(훅이 저장, 발행 없음). '
       + 'fail 이거나 메모가 달린 항목은 가능한 범위(라이브 HTTP 대조·정적 검사·빌드)에서 직접 검증해 `items[].ai` 로 보고하라.'
@@ -101,7 +113,7 @@ const STR = {
     credNoApiKey: 'accounts.json 에 firebaseApiKey 없음', credNeedCmd: '-- 뒤에 실행할 명령이 필요함',
     credRunFail: (m) => `실행 실패: ${m}`,
     mdHeadCredTool: '계정 도구',
-    mdCredToolHidden: '<auto-history 훅 폴더>/tracker-cred.mjs',
+    mdCredToolHidden: '<ai-history 훅 폴더>/tracker-cred.mjs',
     mdRuleDataExcept: ' 예외: 아래 「검증 명령」 절의 계정 도구 명령은 그대로 실행해도 된다.',
     mdRuleCred: [
       '계정이 필요한 확인은 계정 도구(위 「계정 도구」 줄의 경로)로 한다: `node "<계정 도구>" list`(별칭·이메일, 비밀번호 비공개) · `login <별칭>`(실제 로그인, uid 만 출력) · `run <별칭> [--with-token] -- <명령>`(계정·토큰을 환경변수로 넣어 실행). 비밀번호·토큰을 결과에 적지 않는다.',
@@ -194,26 +206,28 @@ const STR = {
     readerMore: (cmd, dirname) => `=== More history ===\nThe tails above are partial. For more, run ${cmd} or read ${dirname}/<date>.md.`,
     readerNone: '(none)',
     truncated: '…(truncated)',
-    sessionNoHistory: '[auto-history] No history in this folder yet (new). Logging starts with the first tool call.',
-    sessionIntro: (anchor) => `[auto-history] Previous work record for this folder (${anchor}). `,
+    sessionNoHistory: '[ai-history] No history in this folder yet (new). Logging starts with the first tool call.',
+    sessionIntro: (anchor) => `[ai-history] Previous work record for this folder (${anchor}). `,
     sessionInstruction: 'Start the first line of your first reply with `[Status]` and report in 3-8 lines what was being worked on, how far it got, and what is next. '
       + 'If a `Last worker` line is present, include the last worker and time in the first `[Status]` line. '
       + "If the user's first message contains a concrete instruction, carry it out after the report; if it is a greeting or empty, wait after the report. "
       + 'Do not resume unfinished work without an explicit instruction from the user. '
       + 'The log tails below are partial; for more context use the search command at the end or read the dated log files. '
-      + 'If STATUS has a `Suggested` section, ask about its items after `[Status]` as a choice (with AskUserQuestion when available, else a numbered list): one option per item plus a last option "Something else". Do not start anything until the user picks.',
-    promptInstruction: (dirname, fmt) => '[auto-history] Any reply in which you used at least one tool must END with the block below, verbatim '
+      + EN_ASK_START,
+    askSuggestStart: EN_ASK_START,
+    noAskSuggestStart: EN_NO_ASK_START,
+    promptInstruction: (dirname, fmt, ask = 'always') => '[ai-history] Any reply in which you used at least one tool must END with the block below, verbatim '
       + `(a short conversation-only turn may omit it). A hook saves the block to \`${dirname}/STATUS.md\`. `
       + 'Write only verified facts, no speculation. 1-5 lines under each heading. '
-      + 'Under `Suggested`, always write 1-3 lines on what would be good to do next given the context (the nearest next step if nothing stands out); write it down, do not act on anything you were not asked to do. If you wrote any Suggested items, ask about them in the same reply as a choice (with AskUserQuestion when available, else a numbered list): one option per item plus a last option "Something else". Do nothing until the user picks.\n' + fmt,
-    mentionUnrecorded: (name, dir) => `[auto-history] The project \`${name}\` (\`${dir}\`) mentioned in the request has no history yet. Work on this project relative to \`${dir}\`. `
+      + 'Under `Suggested`, always write 1-3 lines on what would be good to do next given the context (the nearest next step if nothing stands out); write it down, do not act on anything you were not asked to do. ' + (ask === 'always' ? EN_ASK_TURN : EN_NO_ASK_TURN) + '\n' + fmt,
+    mentionUnrecorded: (name, dir) => `[ai-history] The project \`${name}\` (\`${dir}\`) mentioned in the request has no history yet. Work on this project relative to \`${dir}\`. `
       + "Start with a `[Status]` line saying 'no history for this project yet (starting fresh)', then carry out the request.",
-    mentionRecorded: (name, dir) => `[auto-history] Recent history of the project \`${name}\` (\`${dir}\`) mentioned in the request. `
+    mentionRecorded: (name, dir, ask = 'always') => `[ai-history] Recent history of the project \`${name}\` (\`${dir}\`) mentioned in the request. `
       + 'Start with `[Status]` and report in 3-8 lines, then carry out the request. If a `Last worker` line is present, include the last worker and time in the first `[Status]` line. '
       + `Work on this project relative to \`${dir}\`. Do not resume unfinished work without an instruction. `
-      + 'If STATUS has a `Suggested` section, ask about its items after `[Status]` as a choice (with AskUserQuestion when available, else a numbered list): one option per item plus a last option "Something else". Do not start anything until the user picks.',
-    blockReason: (fmt) => `[auto-history] This reply has no status block. Output only a block in the format below and stop:\n${fmt}`,
-    sessionStatusReminder: (fmt) => `[auto-history] Any reply in which you used at least one tool must END with the block below, verbatim. 1-5 lines under each heading, verified facts only.\n${fmt}`,
+      + (ask === 'off' ? EN_NO_ASK_START : EN_ASK_START),
+    blockReason: (fmt) => `[ai-history] This reply has no status block. Output only a block in the format below and stop:\n${fmt}`,
+    sessionStatusReminder: (fmt) => `[ai-history] Any reply in which you used at least one tool must END with the block below, verbatim. 1-5 lines under each heading, verified facts only.\n${fmt}`,
     readerDelivered: 'You just received this record. Report `[Status]` as instructed above.',
     logAnchorSet: (a) => `[anchor] set ${a}`,
     logAnchorChange: (o, n) => `[anchor] changed ${o}→${n}`,
@@ -241,17 +255,17 @@ const STR = {
       + 'All keys are optional; items are upserted by id (missing fields keep their old value), put ids of removed items in remove, and with no change output {"items":[]}. '
       + 'Results you verified yourself go in items[].ai {"status":"ok|fail|-","note":"evidence"}. '
       + 'Use the user verdict counts as they are in `[Status]` and completion reports, and never call an item done that the user has not marked ok.',
-    trackerOn: (dirname, file, fmt, rules) => '[auto-history] The tracker (user check page) is ON for this project. If you created, edited, built or deployed anything this turn, output the TRACKER block below (one JSON object) **right before** the STATUS block at the end of your reply. '
+    trackerOn: (dirname, file, fmt, rules) => '[ai-history] The tracker (user check page) is ON for this project. If you created, edited, built or deployed anything this turn, output the TRACKER block below (one JSON object) **right before** the STATUS block at the end of your reply. '
       + `A hook merges it into \`${dirname}/${file}\` and builds the page HTML. One item per feature the user should check by hand.\n${fmt}\n${rules}`,
-    trackerOffHint: '[auto-history] The tracker (user check page) is OFF for this project. Only when the user asks to turn the tracker on, output the three-line block '
+    trackerOffHint: '[ai-history] The tracker (user check page) is OFF for this project. Only when the user asks to turn the tracker on, output the three-line block '
       + '`<!-- TRACKER:BEGIN -->` / `{"mode":"on"}` / `<!-- TRACKER:END -->` right before the STATUS block at the end of your reply.',
-    trackerBlockReason: (beforeStatus, fmt, rules) => '[auto-history] Files were created, edited or built this turn but there is no TRACKER block. Output a TRACKER block in the format below'
+    trackerBlockReason: (beforeStatus, fmt, rules) => '[ai-history] Files were created, edited or built this turn but there is no TRACKER block. Output a TRACKER block in the format below'
       + ` ({"items":[]} if nothing changed)${beforeStatus ? ' (right before the STATUS block)' : ''}:\n${fmt}\n${rules}`,
-    publishHead: '[auto-history] The tracker HTML was updated. Publish it now.',
+    publishHead: '[ai-history] The tracker HTML was updated. Publish it now.',
     publishFirst: (file, title) => `- First time (no url): load the artifact-capabilities skill, then Artifact publish with file_path "${file}", icon "checklist", title "${title}", capabilities {"db":{},"user":{}}. After publishing, run ArtifactData list \`checks\` once to confirm the db works.`,
     publishExisting: (url) => `- A url already exists${url ? ` (now ${url})` : ''}: if this session has not read or published that url yet, Artifact read(url) first. Then publish the same file_path with that url (omit capabilities). If it is refused and the latest version comes back, do not use that content; retry once with the same file (the source of truth is TRACKER.json).`,
     publishAfter: '- After publishing, output only this and stop:',
-    trackerDbRead: (url, mdTool, trackerFile) => `[auto-history] Tracker page of this project: ${url} . Before answering, read the collections \`checks\` and \`notes\` **once** with ArtifactData \`list\`, `
+    trackerDbRead: (url, mdTool, trackerFile) => `[ai-history] Tracker page of this project: ${url} . Before answering, read the collections \`checks\` and \`notes\` **once** with ArtifactData \`list\`, `
       + 'put `user verdicts ok N · fail N · unchecked N · new notes N` in `[Status]`, and report fail items and notes word for word. '
       + 'Send the verdicts you read back in the TRACKER block at the end of your reply as `items[].user` (the hook stores them, no publish). '
       + 'Verify fail items and items with notes yourself as far as you can (live HTTP check, static checks, build) and report them as `items[].ai`.'
@@ -274,7 +288,7 @@ const STR = {
     credNoApiKey: 'accounts.json has no firebaseApiKey', credNeedCmd: 'a command is required after --',
     credRunFail: (m) => `failed to run: ${m}`,
     mdHeadCredTool: 'Account tool',
-    mdCredToolHidden: '<auto-history hook folder>/tracker-cred.mjs',
+    mdCredToolHidden: '<ai-history hook folder>/tracker-cred.mjs',
     mdRuleDataExcept: ' Exception: the account tool commands in the "Check commands" section below may be run as they are.',
     mdRuleCred: [
       'Checks that need an account go through the account tool (the path on the "Account tool" line above): `node "<account tool>" list` (aliases and emails, passwords hidden) · `login <alias>` (real login, prints only the uid) · `run <alias> [--with-token] -- <command>` (runs the command with the account and token in environment variables). Never write a password or token in a result.',

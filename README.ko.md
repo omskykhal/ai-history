@@ -98,7 +98,7 @@ node install.mjs --grok-hooks-remove   # Grok 파일만
 <!-- STATUS:END -->
 ```
 
-`추천` 절에는 문맥 흐름상 다음에 하면 좋은 일을 1~3줄 적습니다(마땅한 것이 없으면 가장 가까운 다음 단계). 지시받지 않은 일은 적기만 하고 실행하지 않습니다. 항목을 적은 응답과 다음 세션의 `[현황]` 뒤에서 에이전트는 그 항목을 선택지로 묻습니다(AskUserQuestion 이 있으면 그것으로, 없으면 번호 목록): 항목 하나씩 + 마지막 「다른 할 일」. 사용자가 고르기 전에는 시작하지 않습니다. 이 절이 없어도 블록은 완전한 것으로 봅니다.
+`추천` 절에는 문맥 흐름상 다음에 하면 좋은 일을 1~3줄 적습니다(마땅한 것이 없으면 가장 가까운 다음 단계). 지시받지 않은 일은 적기만 하고 실행하지 않습니다. 짧은 작업을 반복할 때 매 턴 질문이 번거로우면 설정 `SUGGEST_ASK` 를 `start`(세션 시작 때만 질문) 또는 `off`(질문 없음)로 두세요. 적는 것은 그대로입니다. 항목을 적은 응답과 다음 세션의 `[현황]` 뒤에서 에이전트는 그 항목을 선택지로 묻습니다(AskUserQuestion 이 있으면 그것으로, 없으면 번호 목록): 항목 하나씩 + 마지막 「다른 할 일」. 사용자가 고르기 전에는 시작하지 않습니다. 이 절이 없어도 블록은 완전한 것으로 봅니다.
 
 `Stop` 훅이 이걸 뽑아 머리말(`세션`, `작성: <agent> (<id>)`, `갱신`, `앵커`, `재개: claude --resume <id>` 또는 `재개: codex resume <id>`)과 함께 `STATUS.md` 로 씁니다. 세션이 끝나면(`/exit`·`/clear`·로그아웃) `SessionEnd` 훅이 로그에 `[exit] 종료(reason=prompt_input_exit) 재개: claude --resume <id>` 를 남기고, 이 세션의 `STATUS.md`·`sessions/` 사본에 `재개` 줄이 없으면 보강해 세션을 이어갈 명령이 히스토리에 남습니다. 블록이 없으면 **한 번만** 다시 요구(`decision: block`)하고, 컨텍스트 한도·사용자 중단·인증 오류·예약 깨우기·컨텍스트 95% 이상일 땐 요구하지 않습니다. 설정 폴더에 `NO_BLOCK`(Claude) / `NO_BLOCK_CODEX`(Codex) 파일을 두거나 `AUTO_HISTORY_NO_BLOCK=1` 로 끌 수 있습니다.
 
@@ -200,6 +200,7 @@ API 키처럼 보이는 문자열(`AIza…`, `sk-…`, `ghp_…`, `Bearer …`, 
 |---|---|
 | `ROOT` / `AUTO_HISTORY_ROOT` | 경계 폴더(기본 `~/Projects`) |
 | `LANG` / `AUTO_HISTORY_LANG` | `en`(기본) 또는 `ko`: 주입 문구·STATUS 제목·머리말 언어 |
+| `SUGGEST_ASK` / `AUTO_HISTORY_SUGGEST_ASK` | 추천 질문 빈도: `always`(기본, 추천을 적은 응답마다 선택지로 물음) · `start`(세션 시작·프로젝트 언급 때만) · `off`(적기만). 추천 절 작성은 항상 |
 | `INJECT` / `AUTO_HISTORY_INJECT` | 주입 크기: `today=15`, `yday=5`(줄), `line=200`, `total=8000`, `status=4000`(자). 파일은 줄마다, env 는 쉼표로 |
 | `RETENTION` / `AUTO_HISTORY_KEEP_DAYS`, `AUTO_HISTORY_ARCHIVE_DAYS`, `AUTO_HISTORY_SESSIONS_DAYS` | 줄 `keep=30`, `archive=365`, `sessions=7`(일). `keep=0` 로그 회전 끔, `archive=0` `.gz` 영구 보관, `sessions=0` 세션 사본 보존 |
 | `ALIASES` | `문구1\|문구2 => 루트기준\상대경로`, 한 줄에 대상 하나. `ALIASES.example` 참고 |

@@ -167,9 +167,9 @@ fs.writeFileSync(transcript, `${JSON.stringify({ role: 'assistant', message: { c
 const cStop = () => run('stop.mjs', c({ hook_event_name: 'stop', status: 'completed', transcript_path: transcript }));
 const c3 = cStop();
 const c3j = json(c3.stdout);
-check('Cursor 블록 없음: 후속 메시지(두 형식 동일 내용)', c3j && typeof c3j.followup_message === 'string' && c3j.followup_message.startsWith('[auto-history]') && c3j.decision === 'block' && c3j.reason === c3j.followup_message, c3.stdout);
+check('Cursor 블록 없음: 후속 메시지(두 형식 동일 내용)', c3j && typeof c3j.followup_message === 'string' && c3j.followup_message.startsWith('[ai-history]') && c3j.decision === 'block' && c3j.reason === c3j.followup_message, c3.stdout);
 const lenBefore = logOf(cp2).length;
-const c4 = run('prompt-submit.mjs', c({ prompt: c3j ? c3j.followup_message : '[auto-history] x' }));
+const c4 = run('prompt-submit.mjs', c({ prompt: c3j ? c3j.followup_message : '[ai-history] x' }));
 check('Cursor 자동 후속 메시지는 요청으로 기록 안 함', c4.stdout === '' && !logOf(cp2).slice(lenBefore).includes('[User]'), logOf(cp2).slice(lenBefore));
 const c5 = cStop();
 check('Cursor 후속 메시지 다음 Stop 은 요구 없음', c5.stdout === '', c5.stdout);
@@ -178,7 +178,7 @@ run('post-tool.mjs', c({ tool_name: 'Write', tool_input: { path: path.join(cp2, 
 const c6 = cStop();
 check('Cursor 새 요청에서는 다시 1회', json(c6.stdout) && json(c6.stdout).followup_message, c6.stdout);
 // 후속 메시지를 요청으로 판별 못 해 상태가 초기화돼도 반복이 끊겨야 한다
-run('prompt-submit.mjs', c({ prompt: '감싸인 [auto-history] 후속' }));
+run('prompt-submit.mjs', c({ prompt: '감싸인 [ai-history] 후속' }));
 run('post-tool.mjs', c({ tool_name: 'Write', tool_input: { path: path.join(cp2, 'c.txt') } }));
 check('Cursor 판별 실패해도 연속 후속 없음', cStop().stdout === '');
 const bsid = 'f30e6b94-aaaa-4000-8000-00000000000b';

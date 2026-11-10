@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {
   runHook, readInput, hookEnv, emit, inScope, normalizeWinPath, isInteractive, statePaths, writeState, removeFile, maybeDump, historyDir,
-  resolveAnchor, readerBody, readerTotalMax, VALID_SOURCES, AGENT, lastWorkerLine, t, appendLog, runRetention, retentionLogLine,
+  resolveAnchor, readerBody, readerTotalMax, sessionInstructionFor, VALID_SOURCES, AGENT, lastWorkerLine, t, appendLog, runRetention, retentionLogLine,
   trackerDbReadInstruction, statusFormatFor, hasArtifactTools, hasSessionContext, writePending,
 } from './common.mjs';
 
@@ -71,7 +71,7 @@ runHook(async () => {
   } else {
     const lw = lastWorkerLine(anchor, env);
     const dbRead = hasArtifactTools() ? trackerDbReadInstruction(anchor, env) : ''; // read the tracker page db once (only when it has a url). Cursor, Grok and Kimi have no ArtifactData
-    ctx = `${lw ? `[auto-history] ${lw}\n` : ''}${L.sessionIntro(anchor)}${L.sessionInstruction}${dbRead ? `\n${dbRead}` : ''}${readerBody(anchor, env, { sid8: String(data.session_id).slice(0, 8) })}`;
+    ctx = `${lw ? `[ai-history] ${lw}\n` : ''}${L.sessionIntro(anchor)}${sessionInstructionFor(env)}${dbRead ? `\n${dbRead}` : ''}${readerBody(anchor, env, { sid8: String(data.session_id).slice(0, 8) })}`;
     if (ctx.length > readerTotalMax(env)) ctx = ctx.slice(0, readerTotalMax(env));
   }
   if (!hasSessionContext()) {

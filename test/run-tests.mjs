@@ -140,7 +140,7 @@ function block(tag, { crlf = false, drop = null } = {}) {
 }
 const AC2 = /^# STATUS\n세션: [0-9a-f]{8}\n작성: claude \([0-9a-f]{8}\)\n갱신: \d{4}-\d\d-\d\d \d\d:\d\d:\d\d\n앵커: .+\n/;
 const hasAll4 = (s) => ['하던 일', '한 일', '다음 할 일', '진행도'].every((h) => new RegExp(`^## ${h}$`, 'm').test(s));
-const BLOCK_RE = /^\{"decision":"block","reason":"\[auto-history\]/;
+const BLOCK_RE = /^\{"decision":"block","reason":"\[ai-history\]/;
 // OS branch (0.10.1): the hooks run on Windows and Linux; cases whose expectations are Windows paths get a POSIX twin so the suite passes on both.
 const IS_WIN = process.platform === 'win32';
 const WP = (win, posix) => (IS_WIN ? win : posix);
@@ -955,8 +955,8 @@ async function main() {
       const ctx3 = ctxOf(run('session-start.mjs', { session_id: sid3, source: 'startup', cwd: aOld }, baseEnv(sid3)).out);
       rec(8, '(ag) Reader 주입 첫 줄 마지막 작업자', 'claude 세션→"마지막 작업자: codex · 갱신 …"·지시문 포함; codex 세션→claude; 구형 STATUS(작성 줄 없음)→생략',
         `${first} | ${first2} | old=${/마지막 작업자: /.test(ctx3)}`,
-        /^\[auto-history\] 마지막 작업자: codex · 갱신 \d{4}-\d\d-\d\d \d\d:\d\d:\d\d$/.test(first) && /\[현황\]` 첫 줄에 마지막 작업자와 시각을 포함하라/.test(ctx)
-          && /^\[auto-history\] 마지막 작업자: claude · 갱신 /.test(first2) && !/마지막 작업자: /.test(ctx3) && /구형/.test(ctx3));
+        /^\[ai-history\] 마지막 작업자: codex · 갱신 \d{4}-\d\d-\d\d \d\d:\d\d:\d\d$/.test(first) && /\[현황\]` 첫 줄에 마지막 작업자와 시각을 포함하라/.test(ctx)
+          && /^\[ai-history\] 마지막 작업자: claude · 갱신 /.test(first2) && !/마지막 작업자: /.test(ctx3) && /구형/.test(ctx3));
     }
     // (ah) codex 형 payload 로 5 스크립트 정상
     {
@@ -1883,7 +1883,7 @@ async function row12() {
     rec(12, '(f) STATUS 와 합쳐 1회', '프롬프트 후 null·마커 제거 / reason 1개에 STATUS 형식+TRACKER 형식 / 2회차 무출력·마커 정리',
       `reset=${stP.trackerBlockedAt === null && stP.publishAskedAt === null} mkGone=${mkGone} blocks=${nBlocks} both=${/상태 블록이 없습니다/.test(rs4)}/${rs4.includes('<!-- TRACKER:BEGIN -->')} out5='${r5.out}' marker=${fs.existsSync(marker(sid))}`,
       stP.trackerBlockedAt === null && stP.publishAskedAt === null && mkGone && nBlocks === 1 && /상태 블록이 없습니다/.test(rs4) && rs4.includes('<!-- TRACKER:BEGIN -->')
-      && rs4.startsWith('[auto-history]') && r5.out === '' && !fs.existsSync(marker(sid)));
+      && rs4.startsWith('[ai-history]') && r5.out === '' && !fs.existsSync(marker(sid)));
   }
 
   // (h) codex → 블록 병합·HTML 까지, 발행 차단 없음·pending 유지
@@ -2190,6 +2190,29 @@ async function row15() {
       && c1.code === 0 && f1 && /TRACKER_ON/.test(s1) && f2 && /TRACKER_OFF/.test(s2) && f3 && /default/.test(s3) && bad.code !== 0;
     rec(15, '(j) 트래커 기본 꺼짐·힌트 1회·켜기 블록·--tracker 설정', 'plain conf → off/default-off, TRACKER_ON → new / 힌트 1회만 / {"mode":"on"} → on(json)·다음 요청에 블록 지시 / --tracker on·off·default 파일 왕복·status 문구·잘못된 값 거부',
       `e0=${e0.mode}/${e0.reason} eOn=${eOn.mode} hint=${hint(p1)}/${hint(p2)} e1=${e1.mode}/${e1.reason} instOn=${instOn} files=${f1}/${f2}/${f3} status=${s1}|${s2}|${s3} bad=${bad.code}`, ok);
+  }
+  // (k) SUGGEST_ASK(0.11.1): 기본 always·파일·env 우선·잘못된 값 무시 / off 면 턴·세션·언급 지시문에서 질문 문장이 빠지고 "묻지 마라" 문장 / start 는 턴만 빠짐
+  {
+    const mkConfK = (name, files) => { const d = path.join(SCRATCH, name); fs.mkdirSync(d, { recursive: true }); for (const [n, c] of Object.entries(files)) fs.writeFileSync(path.join(d, n), c); return d; };
+    const confOff = mkConfK('conf-suggest-off', { INTERACTIVE_ENTRYPOINTS: 'cli\n', SUGGEST_ASK: '# 시험\noff\n' });
+    const confBad = mkConfK('conf-suggest-bad', { INTERACTIVE_ENTRYPOINTS: 'cli\n', SUGGEST_ASK: 'sometimes\n' });
+    const I = await import('../i18n.mjs');
+    const m0 = C.suggestAskMode({}); const mF = C.suggestAskMode({ AUTO_HISTORY_CONF_DIR: confOff }); const mE = C.suggestAskMode({ AUTO_HISTORY_CONF_DIR: confOff, AUTO_HISTORY_SUGGEST_ASK: 'start' });
+    const mB = C.suggestAskMode({ AUTO_HISTORY_CONF_DIR: confBad }); const mX = C.suggestAskMode({ AUTO_HISTORY_SUGGEST_ASK: 'nope' });
+    const tk = I.T('ko'); const te = I.T('en');
+    const ASK_TURN_KO = /추천 항목을 적었으면 같은 응답에서 그 항목을 선택지로 물어라/; const NO_TURN_KO = /추천 항목은 이 응답에서 묻지 말고 적기만 하라/;
+    const ASK_START_KO = /STATUS 에 `추천` 절이 있으면 `\[현황\]` 뒤에 그 항목을 선택지로 물어라/; const NO_START_KO = /추천 질문 꺼짐/;
+    const pA = tk.promptInstruction('.ai-history', 'FMT'); const pS = tk.promptInstruction('.ai-history', 'FMT', 'start'); const pO = tk.promptInstruction('.ai-history', 'FMT', 'off');
+    const sA = C.sessionInstructionFor({ AUTO_HISTORY_LANG: 'ko' }); const sO = C.sessionInstructionFor({ AUTO_HISTORY_LANG: 'ko', AUTO_HISTORY_SUGGEST_ASK: 'off' }); const sS = C.sessionInstructionFor({ AUTO_HISTORY_LANG: 'ko', AUTO_HISTORY_SUGGEST_ASK: 'start' });
+    const rA = tk.mentionRecorded('X', 'C:\\x'); const rO = tk.mentionRecorded('X', 'C:\\x', 'off');
+    const eO = te.promptInstruction('.ai-history', 'FMT', 'off'); const eS = C.sessionInstructionFor({ AUTO_HISTORY_LANG: 'en', AUTO_HISTORY_SUGGEST_ASK: 'off' }); const eA = te.promptInstruction('.ai-history', 'FMT');
+    const ok = m0 === 'always' && mF === 'off' && mE === 'start' && mB === 'always' && mX === 'always'
+      && ASK_TURN_KO.test(pA) && !NO_TURN_KO.test(pA) && !ASK_TURN_KO.test(pS) && NO_TURN_KO.test(pS) && !ASK_TURN_KO.test(pO) && NO_TURN_KO.test(pO)
+      && ASK_START_KO.test(sA) && ASK_START_KO.test(sS) && !ASK_START_KO.test(sO) && NO_START_KO.test(sO)
+      && ASK_START_KO.test(rA) && !ASK_START_KO.test(rO) && NO_START_KO.test(rO)
+      && /Do not ask about the Suggested items in this reply/.test(eO) && /If you wrote any Suggested items, ask about them/.test(eA) && /suggestion prompts are off/.test(eS)
+      && /1~3줄로 반드시 적되/.test(pO) && /always write 1-3 lines/.test(eO);
+    rec(15, '(k) SUGGEST_ASK always/start/off', '기본 always·파일 off·env start 우선·잘못된 값 always / off: 턴·세션·언급 질문 문장 제거+묻지 마라 / start: 턴만 제거 / 작성 의무는 유지', `modes=${m0},${mF},${mE},${mB},${mX} ok=${ok}`, ok);
   }
   // (g) 기존 1~14행 전부 통과
   {

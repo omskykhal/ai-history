@@ -9,7 +9,7 @@ description: 트래커 미확인·문제 항목을 검증 에이전트(tracker-v
 **시작:** 사용자 명령으로만 시작한다. 자동 시작 금지.
 
 ## 준비
-- 앵커 = 이 프로젝트의 auto-history 앵커 폴더. `TRACKER.json` = `<앵커>/.ai-history/TRACKER.json`.
+- 앵커 = 이 프로젝트의 ai-history 앵커 폴더. `TRACKER.json` = `<앵커>/.ai-history/TRACKER.json`.
 - 트래커 도구 = 훅이 프롬프트 지시문에 넣는 `트래커 도구: node "<HOOK_DIR>/tracker-md.mjs"` 줄(영어 모드는 `Tracker tool: …`)의 절대경로를 그대로 쓴다(플러그인 설치에서도 같은 줄을 쓴다). 그 줄이 없으면 실행하지 말고 「트래커 도구 경로 없음」 으로 보고 후 종료.
 
 ## 판정 보호 규칙(UI 라벨·http `-` 공통)

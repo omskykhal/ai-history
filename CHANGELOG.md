@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.11.1 — 2026-11-10
+
+- The injected text, log tags and search output now say `[ai-history]` instead of `[auto-history]` (32 places: i18n, common, prompt-submit, session-start, search; the Cursor echo guard and tests follow). `auto-history` was the author's local hook set the plugin was generalized from; the product name is ai-history. The `mdCredToolHidden` placeholder and the tracker-test skill text use the new name too. No behaviour change; stored files are unaffected (the tag never appears in the log lines or STATUS.md).
+
+- **`SUGGEST_ASK`** (conf file first line or `AUTO_HISTORY_SUGGEST_ASK`): `always` (default) keeps the per-reply choice about Suggested items; `start` asks only at session start / project mention; `off` never asks. The Suggested lines are written in every mode. New exports `suggestAskMode()`, `sessionInstructionFor()`; `promptInstruction` / `mentionRecorded` take the mode. Tests: row 15 (k), run-tests 280 → 281.
+
 ## 0.11.0 — 2026-11-10
 
 - **Tracker page is off by default.** New projects no longer get the tracker automatically; it turns on per project when the user asks ("turn the tracker on" → the agent outputs the `{"mode":"on"}` block, as before for older projects). While off, the "tracker is off" hint is injected once per session instead of on every prompt. A `TRACKER_ON` file in the conf dir restores the 0.10 rule (auto-on for histories starting on/after `TRACKER_SINCE`); `node install.mjs --config --tracker on|off|default` writes/removes `TRACKER_ON` / `TRACKER_OFF`, and `--status` reports `trackerDefault`. Projects that already have `TRACKER.json` are unaffected. Basis: on the author's machine 3 of 16 projects used the tracker; similar tools have no equivalent feature (research 2026-11-10).

@@ -1,7 +1,7 @@
 // UserPromptSubmit hook: log the prompt, detect a project mention, inject the STATUS-block instruction (+ Reader when a new project was named).
 import {
   runHook, readInput, hookEnv, resolveAnchor, isInteractive, statePaths, writeState, removeFile, appendLog,
-  maybeDump, mask, oneLine, statusFormatFor, listHistoryProjects, listCandidateFolders, loadAliases, matchProjectMention, readerBody, readerTotalMax,
+  maybeDump, mask, oneLine, statusFormatFor, listHistoryProjects, listCandidateFolders, loadAliases, matchProjectMention, readerBody, readerTotalMax, suggestAskMode,
   AGENT, historyDirName, lastWorkerLine, t, runRetention, retentionLogLine,
   trackerEligibility, trackerInstruction, trackerDbReadInstruction,
   hasArtifactTools, hasToolContext, emitPromptContext, readPending, writePending, kimiLateCapture,
@@ -14,10 +14,10 @@ runHook(async () => {
   const data = await readInput();
   if (!data || !data.session_id) return;
   const L = t(env);
-  const INSTRUCTION = L.promptInstruction(historyDirName(env), statusFormatFor(env));
+  const INSTRUCTION = L.promptInstruction(historyDirName(env), statusFormatFor(env), suggestAskMode(env));
   const raw = [data.prompt, data.user_prompt, data.message].find((v) => typeof v === 'string');
   // Cursor submits a Stop follow-up as a user message. It is not a user request: no log line, no state reset.
-  if (AGENT === 'cursor' && raw !== undefined && raw.startsWith('[auto-history]')) return;
+  if (AGENT === 'cursor' && raw !== undefined && raw.startsWith('[ai-history]')) return;
   if (AGENT === 'kimi') kimiLateCapture(data, env); // handle the previous turn's corrected reply before the anchor can change
   const interactive = !data.agent_id && isInteractive(data, env);
 
@@ -60,11 +60,11 @@ runHook(async () => {
     const dbRead = hit.recorded === false || !hasArtifactTools() ? '' : trackerDbReadInstruction(hit.anchor, env);
     let reader = hit.recorded === false
       ? L.mentionUnrecorded(hit.name, hit.dir)
-      : L.mentionRecorded(hit.name, hit.dir)
+      : L.mentionRecorded(hit.name, hit.dir, suggestAskMode(env))
         + (dbRead ? `\n${dbRead}` : '') // read the tracker page db once (only when it has a url)
         + readerBody(hit.anchor, env, { sid8: String(data.session_id).slice(0, 8) });
     const lw = hit.recorded === false ? '' : lastWorkerLine(hit.anchor, env);
-    if (lw) reader = `[auto-history] ${lw}\n${reader}`;
+    if (lw) reader = `[ai-history] ${lw}\n${reader}`;
     if (reader.length > readerTotalMax(env)) reader = reader.slice(0, readerTotalMax(env));
     mentionReader = reader;
   }

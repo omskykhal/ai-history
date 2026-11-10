@@ -98,7 +98,7 @@ After any reply in which the agent used a tool, it is instructed to end with:
 <!-- STATUS:END -->
 ```
 
-`Suggested` holds 1-3 lines on what would be good to do next given the context (the nearest next step if nothing stands out). The agent writes it down and does not act on anything it was not asked to do. In the reply that writes them and after `[Status]` in the next session, the agent asks about those items as a choice (AskUserQuestion when available, else a numbered list): one option per item plus a last option "Something else". Nothing starts until the user picks. A block without this section still counts as complete.
+`Suggested` holds 1-3 lines on what would be good to do next given the context (the nearest next step if nothing stands out). If the per-turn question gets in the way of short repetitive work, set `SUGGEST_ASK` to `start` (ask only at session start) or `off` (never ask); the lines are still written. The agent writes it down and does not act on anything it was not asked to do. In the reply that writes them and after `[Status]` in the next session, the agent asks about those items as a choice (AskUserQuestion when available, else a numbered list): one option per item plus a last option "Something else". Nothing starts until the user picks. A block without this section still counts as complete.
 
 The `Stop` hook extracts it and writes `STATUS.md` with a header (`Session`, `Author: <agent> (<id>)`, `Updated`, `Anchor`, `Resume: claude --resume <id>` or `Resume: codex resume <id>`). When the session ends (`/exit`, `/clear`, logout), the `SessionEnd` hook logs `[exit] session end(reason=prompt_input_exit) resume: claude --resume <id>` and adds the `Resume` line to this session's `STATUS.md` / `sessions/` copy if it is missing, so the command to continue the session stays in the history. If the block is missing, the hook asks **once** for it (`decision: block`), never when the stop was caused by a context limit, an interruption, an auth error, a scheduled wake-up, or when context is ≥95% full. Disable the nudge with a `NO_BLOCK` file (Claude) / `NO_BLOCK_CODEX` file (Codex) in the conf dir, or `AUTO_HISTORY_NO_BLOCK=1`.
 
@@ -200,6 +200,7 @@ All files live next to the scripts (or in `AUTO_HISTORY_CONF_DIR`). Missing file
 |---|---|
 | `ROOT` / `AUTO_HISTORY_ROOT` | boundary folder (default `~/Projects`) |
 | `LANG` / `AUTO_HISTORY_LANG` | `en` (default) or `ko`: language of injected instructions, STATUS headings and header |
+| `SUGGEST_ASK` / `AUTO_HISTORY_SUGGEST_ASK` | how often the agent asks about Suggested items: `always` (default: a choice in every reply that writes them), `start` (only at session start / project mention), `off` (write only). The section itself is always written |
 | `INJECT` / `AUTO_HISTORY_INJECT` | injection sizes: `today=15`, `yday=5` (lines), `line=200`, `total=8000`, `status=4000` (chars). One per line in the file, comma-separated in the env var |
 | `RETENTION` / `AUTO_HISTORY_KEEP_DAYS`, `AUTO_HISTORY_ARCHIVE_DAYS`, `AUTO_HISTORY_SESSIONS_DAYS` | lines `keep=30`, `archive=365`, `sessions=7` (days). `keep=0` disables log rotation, `archive=0` keeps `.gz` forever, `sessions=0` keeps session copies |
 | `ALIASES` | `phrase1\|phrase2 => relative\path\under\root`, one target per line. See `ALIASES.example` |

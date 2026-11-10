@@ -32,7 +32,7 @@ export let AGENT = parseAgent();
 // other tools' settings) is never looked at: every hook builds its `env` with hookEnv() instead of using process.env.
 export const ENV_KEYS = [
   'AUTO_HISTORY_ROOT', 'AUTO_HISTORY_LANG', 'AUTO_HISTORY_DIRNAME', 'AUTO_HISTORY_DISABLE', 'AUTO_HISTORY_NO_BLOCK',
-  'AUTO_HISTORY_CONF_DIR', 'AUTO_HISTORY_STATE_DIR', 'AUTO_HISTORY_KIMI_HOME', 'AUTO_HISTORY_KEEP_DAYS', 'AUTO_HISTORY_ARCHIVE_DAYS', 'AUTO_HISTORY_SESSIONS_DAYS',
+  'AUTO_HISTORY_SUGGEST_ASK', 'AUTO_HISTORY_CONF_DIR', 'AUTO_HISTORY_STATE_DIR', 'AUTO_HISTORY_KIMI_HOME', 'AUTO_HISTORY_KEEP_DAYS', 'AUTO_HISTORY_ARCHIVE_DAYS', 'AUTO_HISTORY_SESSIONS_DAYS',
   'CLAUDE_CODE_ENTRYPOINT', 'CLAUDE_PROJECT_DIR', 'CLAUDE_PLUGIN_ROOT', 'CLAUDE_PLUGIN_DATA', 'CLAUDECODE', 'CLAUDE_CODE_SESSION_ID',
   'CLAUDE_CODE_SESSION_ATTENDED', 'CLAUDE_CODE_CHILD_SESSION', 'AI_AGENT',
 ];
@@ -74,7 +74,7 @@ export function statusFormatFor(env = process.env) { return statusFormat(lang(en
 export const STATUS_FORMAT = statusFormatFor();
 
 export function warn(msg) {
-  try { process.stderr.write(`[auto-history] ${String(msg).split(/\r?\n/)[0]}\n`); } catch { /* ignore */ }
+  try { process.stderr.write(`[ai-history] ${String(msg).split(/\r?\n/)[0]}\n`); } catch { /* ignore */ }
 }
 
 // stdin with timeout
@@ -727,6 +727,20 @@ export function injectLimits(env = process.env) {
   return lim;
 }
 export function readerTotalMax(env = process.env) { return injectLimits(env).total; }
+// Suggested-section interview frequency: always (default — ask in every reply that writes items), start (ask only at session start / project
+// mention), off (write the items, never ask). AUTO_HISTORY_SUGGEST_ASK env > <ConfDir>/SUGGEST_ASK first line > always.
+export const SUGGEST_ASK_MODES = ['always', 'start', 'off'];
+export function suggestAskMode(env = process.env) {
+  const pick = (v) => { const s = String(v || '').trim().toLowerCase(); return SUGGEST_ASK_MODES.includes(s) ? s : null; };
+  const fromEnv = pick(env.AUTO_HISTORY_SUGGEST_ASK);
+  if (fromEnv) return fromEnv;
+  const lines = readListFile(path.join(getConfDir(env), 'SUGGEST_ASK'));
+  return (lines && pick(lines[0])) || 'always';
+}
+export function sessionInstructionFor(env = process.env) {
+  const L = t(env);
+  return suggestAskMode(env) === 'off' ? L.sessionInstruction.replace(L.askSuggestStart, L.noAskSuggestStart) : L.sessionInstruction;
+}
 // Last n lines of a file, each cut to lineMax chars (… appended when cut). '' when missing.
 export function tailLinesCut(file, n, lineMax) {
   const tail = tailLines(file, n);
