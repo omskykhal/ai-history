@@ -139,6 +139,15 @@ A per-project checklist page for the things **you** should check by hand (one ca
 - **When**: if a turn created or edited files under the project (or ran a build / deploy / create command), the agent is asked to end its reply with a TRACKER block right before the STATUS block. The `Stop` hook merges it (upsert by `id`, `remove`, auto areas, limits: 300 items, 600 chars per field) and rebuilds the HTML. If the block is missing it asks once (combined with the STATUS nudge, one block per turn).
 - **Publishing** (Claude Code only): when the HTML changed, Claude is asked once to publish it as a private claude.ai Artifact with the `db` and `user` capabilities and to reply with `{"url":"https://claude.ai/artifact/<id>"}`, which is stored. Your verdicts and notes on the page are stored in the Artifact's shared db (`checks/<id>`, `notes`); without it they stay in that browser only. At the next session start Claude is asked to read them once and report them in `[Status]`. Codex merges blocks and builds the HTML but is never asked to publish.
 - **Which projects (off by default since 0.11.0)**: every project stays off until you ask ("turn the tracker on") and the agent outputs the `{"mode":"on"}` block. While off, a one-line "tracker is off, ask to turn it on" hint is injected once per session. A `TRACKER_ON` file in the conf dir restores the 0.10 rule (on for projects whose history starts on or after `2026-10-27`, or that have no history yet). `{"mode":"off"}` turns it off for one project. Projects that already have a `TRACKER.json` follow that file's mode, so nothing changes for them.
+- **Turning it on, by example**: when you say `turn the tracker on`, the agent ends that reply with the three lines below, right before the STATUS block. The `Stop` hook creates `TRACKER.json`, and from the next turn on a TRACKER block is requested whenever files were changed or built.
+
+  ```
+  <!-- TRACKER:BEGIN -->
+  {"mode":"on"}
+  <!-- TRACKER:END -->
+  ```
+
+  To turn it off: `turn the tracker off` → the same block with `{"mode":"off"}`. The other agents (Codex, Grok, Kimi, Cursor) use the same block.
 - **Turn off / tune**: a `TRACKER_OFF` file in the conf dir turns it off everywhere (blocks are ignored, nothing is injected). `node install.mjs --config --tracker on|off|default` writes and removes the `TRACKER_ON` / `TRACKER_OFF` files. A `TRACKER_SINCE` file (first `YYYY-MM-DD` line) is the cut-off date used with `TRACKER_ON`.
 
 Block format (every key optional; `{"items":[]}` = no change):

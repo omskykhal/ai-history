@@ -139,6 +139,15 @@ API 키처럼 보이는 문자열(`AIza…`, `sk-…`, `ghp_…`, `Bearer …`, 
 - **언제**: 한 턴에 프로젝트 안 파일을 만들거나 고쳤으면(또는 빌드·배포·생성 명령을 실행했으면) 응답 끝 STATUS 블록 바로 앞에 TRACKER 블록을 내도록 지시합니다. `Stop` 훅이 병합(`id` 기준 upsert·`remove`·영역 자동 생성·상한 300항목·필드 600자)하고 HTML 을 다시 만듭니다. 블록이 없으면 1회 요구합니다(STATUS 요구와 합쳐 턴당 1회).
 - **발행**(Claude Code 만): HTML 이 바뀌면 Claude 에게 `db`·`user` capability 를 단 비공개 claude.ai Artifact 로 발행하고 `{"url":"https://claude.ai/artifact/<id>"}` 로 답하라고 1회 요구하며, 그 url 을 저장합니다. 페이지에서 누른 판정·메모는 Artifact 공유 db(`checks/<id>`, `notes`)에 저장되고, db 가 없으면 그 브라우저에만 남습니다. 다음 세션 시작 때 Claude 가 이를 1회 읽어 `[현황]` 에 보고하도록 지시합니다. Codex 는 블록 병합·HTML 생성까지만 하고 발행 요구는 받지 않습니다.
 - **대상 프로젝트(0.11.0 부터 기본 꺼짐)**: 어떤 프로젝트든 사용자가 "트래커 켜줘" 라고 해서 에이전트가 `{"mode":"on"}` 블록을 낼 때까지 꺼져 있습니다. 꺼진 동안은 세션당 1회만 "트래커 꺼짐, 켜려면 말하라" 힌트가 주입됩니다. 설정 폴더에 `TRACKER_ON` 파일을 두면 0.10 까지의 규칙(히스토리가 `2026-10-27` 이후에 시작됐거나 없는 프로젝트는 자동 켜짐)으로 돌아갑니다. `{"mode":"off"}` 는 그 프로젝트만 끕니다. 이미 `TRACKER.json` 이 있는 프로젝트는 그 파일의 mode 를 따르므로 변화가 없습니다.
+- **켜기 예시**: 사용자가 `트래커 켜줘` 라고 하면 에이전트는 그 응답 끝, STATUS 블록 바로 앞에 아래 세 줄을 출력합니다. `Stop` 훅이 `TRACKER.json` 을 만들고, 다음 턴부터 파일 변경·빌드가 있으면 TRACKER 블록을 요구합니다.
+
+  ```
+  <!-- TRACKER:BEGIN -->
+  {"mode":"on"}
+  <!-- TRACKER:END -->
+  ```
+
+  끌 때는 `트래커 꺼줘` → 같은 자리에 `{"mode":"off"}`. 다른 에이전트(Codex·Grok·Kimi·Cursor)도 같은 블록으로 켜고 끕니다.
 - **끄기·조정**: 설정 폴더에 `TRACKER_OFF` 파일이 있으면 전체 끔(블록 무시·주입 없음). `node install.mjs --config --tracker on|off|default` 가 `TRACKER_ON`/`TRACKER_OFF` 파일을 만들고 지웁니다. `TRACKER_SINCE` 파일(첫 `YYYY-MM-DD` 줄)은 `TRACKER_ON` 일 때의 기준 날짜입니다.
 
 블록 형식(모든 키 선택, `{"items":[]}` = 변경 없음):
