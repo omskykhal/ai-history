@@ -20,7 +20,7 @@ Close the laptop mid-task, come back tomorrow, open Claude Code, Codex, Grok, Ki
 | Claude Code | hooks support (`SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `Stop`, `SessionEnd`) |
 | OpenAI Codex CLI | 0.160 or newer with `hooks` enabled (`codex features list` → `hooks stable true`), optional |
 | Grok, Kimi Code, Cursor | Tested with Grok 1.0.70, Kimi Code 2.3.3 and Cursor 3.20.21, optional. See [Other agents](#other-agents-grok-kimi-cursor-060) |
-| OS | **Windows** and **Linux** (tested: plugin install, the six hooks, a `claude -p` e2e run and all three test suites, 2026-11-10). macOS: path handling is implemented but **untested** |
+| OS | **Windows** and **Linux** (tested: plugin install and update via `claude plugin update`, the six hooks, a `claude -p` e2e run and all three test suites, on 0.11.0, 2026-11-10). macOS: path handling is implemented but **untested** |
 
 ## Install
 
@@ -254,7 +254,7 @@ If you keep global copies of the agent and skill (`~/.claude/agents/tracker-veri
 
 ## Known limits
 
-- Tested platforms: Windows and Linux (plugin install, hook behaviour, e2e, all three test suites, 2026-11-10). macOS is untested.
+- Tested platforms: Windows and Linux (plugin install and update, hook behaviour, e2e, all three test suites, on 0.11.0, 2026-11-10). macOS is untested.
 - Headless `claude -p` writes tool logs only; injection and the STATUS nudge are for interactive sessions. Without `AUTO_HISTORY_ROOT`, nothing happens on a machine where the default `~/Projects` does not exist.
 - Two agents writing the same project at the same time interleave in the log; `STATUS.md` is last-writer-wins (each session's own block survives in `sessions/`, see above).
 - `grok -p` run outside Claude Code counts as interactive, because no signal to tell it apart was found.
