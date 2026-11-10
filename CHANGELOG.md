@@ -2,7 +2,7 @@
 
 ## 0.10.3 — 2026-11-10
 
-- Tests only, third Linux pass (Linux after 0.10.2: run-tests 272/279, agent 92/92, cursor 22/23): the alias expectation in row 7 (ba) uses `path.join`, and the Cursor normalisation check strips the leading `/` of the workspace-root URI only on Windows. Hook code unchanged.
+- Tests only, third Linux pass (Linux after 0.10.2: run-tests 272/279, agent 92/92, cursor 22/23): the alias expectation in row 7 (ba) uses `path.join`, and the Cursor normalisation check strips the leading `/` of the workspace-root URI only on Windows. Hook code unchanged. Linux after this change: run-tests 279/279, agent 92/92, cursor 23/23 — the suites pass on both platforms; README platform wording updated.
 
 ## 0.10.2 — 2026-11-10
 

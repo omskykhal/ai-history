@@ -20,7 +20,7 @@
 | Claude Code | 훅 지원(`SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `Stop`, `SessionEnd`) |
 | OpenAI Codex CLI | 0.160 이상, `hooks` 사용 가능(`codex features list` → `hooks stable true`), 선택 |
 | Grok·Kimi Code·Cursor | Grok 1.0.70·Kimi Code 2.3.3·Cursor 3.20.21 로 확인, 선택. [다른 에이전트](#다른-에이전트-grokkimicursor060) 참고 |
-| OS | **Windows**(검증됨). **Linux**: 2026-11-10 플러그인 설치·훅 6개·`claude -p` e2e 동작 확인(자체 시험 스위트는 Windows 경로 기대값 때문에 일부 실패, 훅 동작과 무관). macOS: 경로 처리는 구현돼 있으나 **미검증** |
+| OS | **Windows**·**Linux**(검증됨: 플러그인 설치·훅 6개·`claude -p` e2e·자체 시험 3종 전부 통과, 2026-11-10). macOS: 경로 처리는 구현돼 있으나 **미검증** |
 
 ## 설치
 
@@ -244,7 +244,7 @@ node test/run-cursor-tests.mjs
 
 ## 알려진 한계
 
-- 검증된 플랫폼은 Windows 와 Linux(플러그인 설치·훅 동작·e2e, 2026-11-10). macOS 는 미검증. Linux 에서 자체 시험 스위트는 Windows 경로(`C:\…`, `\` 구분자, 대소문자) 기대값이 박힌 케이스가 실패함(run-tests 250/279 등) — 훅 동작 문제가 아님
+- 검증된 플랫폼은 Windows 와 Linux(플러그인 설치·훅 동작·e2e·시험 3종 전부 통과, 2026-11-10). macOS 는 미검증
 - 헤드리스 `claude -p` 는 도구 로그만 남기고 주입·STATUS 요구는 하지 않음(대화형 세션 전용). 설치 뒤 `AUTO_HISTORY_ROOT` 를 지정하지 않으면 기본 `~/Projects` 가 없는 환경에서는 아무것도 하지 않음
 - 두 에이전트가 같은 프로젝트를 동시에 쓰면 로그는 섞이고 `STATUS.md` 는 마지막 작성자 우선(세션별 블록은 `sessions/` 에 남음, 위 절 참고)
 - Claude Code 밖에서 단독 실행한 `grok -p` 는 구분 신호를 찾지 못해 대화형으로 처리됨
