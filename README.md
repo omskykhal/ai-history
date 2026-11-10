@@ -4,6 +4,14 @@
 
 [한국어 README](README.ko.md)
 
+[![Release](https://img.shields.io/github/v/release/omskykhal/ai-history?label=release)](https://github.com/omskykhal/ai-history/releases/latest) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) ![Platforms](https://img.shields.io/badge/tested-Windows%20%7C%20Linux-informational) ![Agents](https://img.shields.io/badge/agents-Claude%20Code%20%7C%20Codex%20%7C%20Grok%20%7C%20Kimi%20%7C%20Cursor-lightgrey)
+
+Install in Claude Code (one line; the installer script covers the other agents, see [Install](#install)):
+
+```
+/plugin install ai-history --marketplace omskykhal/ai-history
+```
+
 Close the laptop mid-task, come back tomorrow, open Claude Code, Codex, Grok, Kimi or Cursor from any folder, say the project's name, and the agent starts with a `[Status]` report of what was being done, how far it got, what is next, and **which agent did it last**.
 
 - Every tool call is appended to `<project>/.ai-history/YYYY-MM-DD.md` as one line: `- HH:mm:ss [session][claude|codex|grok|kimi|cursor] ▶ [Bash] npm test`.

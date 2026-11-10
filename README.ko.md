@@ -4,6 +4,14 @@
 
 [English README](README.md)
 
+[![Release](https://img.shields.io/github/v/release/omskykhal/ai-history?label=release)](https://github.com/omskykhal/ai-history/releases/latest) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) ![Platforms](https://img.shields.io/badge/tested-Windows%20%7C%20Linux-informational) ![Agents](https://img.shields.io/badge/agents-Claude%20Code%20%7C%20Codex%20%7C%20Grok%20%7C%20Kimi%20%7C%20Cursor-lightgrey)
+
+Claude Code 에서 한 줄로 설치(다른 에이전트는 설치 스크립트, [설치](#설치) 참고):
+
+```
+/plugin install ai-history --marketplace omskykhal/ai-history
+```
+
 작업 중에 노트북을 닫아도, 다음 날 아무 폴더에서나 Claude Code·Codex·Grok·Kimi·Cursor 를 열고 프로젝트 이름만 말하면 에이전트가 `[현황]` 보고로 시작합니다. 무엇을 하던 중이었는지, 어디까지 했는지, 다음에 뭘 할지, 그리고 **마지막으로 누가(claude/codex) 작업했는지**까지.
 
 - 도구 호출마다 `<프로젝트>/.ai-history/YYYY-MM-DD.md` 에 한 줄: `- HH:mm:ss [세션][claude|codex] ▶ [Bash] npm test`
