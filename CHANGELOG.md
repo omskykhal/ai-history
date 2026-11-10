@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.10.3 — 2026-11-10
+
+- Tests only, third Linux pass (Linux after 0.10.2: run-tests 272/279, agent 92/92, cursor 22/23): the alias expectation in row 7 (ba) uses `path.join`, and the Cursor normalisation check strips the leading `/` of the workspace-root URI only on Windows. Hook code unchanged.
+
 ## 0.10.2 — 2026-11-10
 
 - Tests only, second Linux pass (Linux after 0.10.1: run-tests 259/279, agent 92/92, cursor 22/23). Fixtures that still assumed `\` or a drive letter: the Edit path in row 4, the alias table (`teacher\tauko` → `teacher/tauko`; the parser accepts both separators), the `--migrate-dirname` expectations, the Codex `hooks.json` command regex (`/` or `X:/`), and the Cursor workspace-root URI (POSIX roots are plain paths, no leading extra `/`). Hook code unchanged.

@@ -35,7 +35,7 @@ check('BOM 제거', C.decodeInput(Buffer.from([0xef, 0xbb, 0xbf, 0x7b, 0x7d])) =
 check('UTF-16 해독', C.decodeInput(Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from('{}', 'utf16le')])) === '{}');
 check('Claude 입력 불변', (() => { const d = { session_id: 's', cwd: 'x' }; return C.normalizeHookInput(d, env) === d && C.AGENT === 'claude'; })());
 const n = C.normalizeHookInput(base('s1', { hook_event_name: 'sessionStart', duration: 5 }), env);
-check('Cursor 정규화', n.cwd.toLowerCase() === rootUri.slice(1).toLowerCase() && n.source === 'startup' && n.duration_ms === 5 && C.AGENT === 'cursor', JSON.stringify(n));
+check('Cursor 정규화', n.cwd.toLowerCase() === (process.platform === 'win32' ? rootUri.slice(1) : rootUri).toLowerCase() && n.source === 'startup' && n.duration_ms === 5 && C.AGENT === 'cursor', JSON.stringify(n));
 check('도구 cwd 우선', C.normalizeHookInput(base('s', { tool_input: { cwd: 'c:\\t' } }), env).cwd === 'c:\\t');
 check('Shell 요약', C.summarizeTool({ tool_name: 'Shell', tool_input: { command: 'dir' } }) === '[Shell] dir');
 check('백그라운드는 비대화형', !C.isInteractive({ is_background_agent: true }, env, 'cursor') && C.isInteractive({}, env, 'cursor'));

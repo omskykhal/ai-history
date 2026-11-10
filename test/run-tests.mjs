@@ -894,8 +894,8 @@ async function main() {
         m3(`${filler}play 확인`) === null && m3(`play 확인 ${filler}`) === R(TK));
       const pc = '<pasted_content id="x">\nlanding page\n</pasted_content> 이거 뭐야';
       rec(7, '(az) pasted_content 안 landing → 매칭 없음', 'null', String(m3(pc)), m3(pc) === null);
-      rec(7, '(ba) "landing 랜딩 작업 이어서" → tauko-landing', R('teacher\\tauko-landing'), String(m3('landing 랜딩 작업 이어서')),
-        m3('landing 랜딩 작업 이어서') === R('teacher\\tauko-landing'));
+      rec(7, '(ba) "landing 랜딩 작업 이어서" → tauko-landing', R(path.join('teacher', 'tauko-landing')), String(m3('landing 랜딩 작업 이어서')),
+        m3('landing 랜딩 작업 이어서') === R(path.join('teacher', 'tauko-landing')));
     }
   }
 
