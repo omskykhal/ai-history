@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.13.0 — 2026-11-17
+
+Antigravity CLI (`agy`) support. Measured on agy 1.5.9, Windows: all six of its hook events fire from both the workspace `.agents/hooks.json` and the global `~/.gemini/config/hooks.json`, injected system messages are followed by the model, and a `Stop` hook can continue the turn.
+
+- **`node install.mjs --agy-hooks`** adds one key, `ai-history`, to `~/.gemini/config/hooks.json` with four handlers (`--agent agy`); other keys are kept and a backup is written when the file existed. `--agy-hooks-remove` deletes only that key. `--agy-file <path>` overrides the location.
+- Event mapping: `SessionStart` → earlier history and `[Status]`; `PreInvocation` → prompt log, project match, STATUS instruction; `PostToolUse` → tool log; `Stop` → STATUS save and the one-time nudge. Context goes in as `injectSteps` with a `systemMessage`; the nudge is `decision: "continue"` with the request as `reason`.
+- `PreInvocation` fires before every model call, not once per request. A per-session marker (`state/<session>.turn`) makes only the first call of a request count: call number 0, a turn that `Stop` has closed, or a changed prompt. The marker stays open while a nudge is being answered, so the continued turn is not logged as a new request.
+- agy's `Stop` input has no reply text. The reply is read from the transcript (`transcript_full.jsonl`): the last `PLANNER_RESPONSE` of the model without tool calls, skipping system messages. No nudge after a turn that ended with an error or an interruption.
+- Input fields are camelCase (`conversationId`, `lastUserInput`, `toolCall.name` / `toolCall.args`) and tool arguments start with a capital (`Path`, `CommandLine`); they are mapped to the common form. `run_command` counts as a shell tool, `write_file` and `edit_file` as edit tools. Every agy hook answers with JSON (`{}` when there is nothing to say).
+- `PreToolUse` is not registered for agy: that hook has to return a permission decision, and ai-history stays out of permissions.
+- Resume command `agy --conversation <id>`; `agy` is an accepted tracker author. agy has no session-end event, so no `[exit]` line is written.
+- New exports: `emitAgyContext`, `agyNewTurn`, `agyCloseTurn`, `agyLastMessage`; `statePaths()` has `turn`.
+- Not observed yet: the interactive TUI, and the Antigravity desktop app and IDE, which read the same `hooks.json`.
+- Tests: 21 agy checks in the agent suite (injection form, call de-duplication, capitalised arguments, transcript reading, the nudge and its continuation, error stop, project list, install / unchanged / remove).
+
 ## 0.12.0 — 2026-11-16
 
 Finding the project when the session was opened outside the root. Measured on the author's machine: of 15 Kimi sessions opened in the home folder, 8 got no project, so nothing was injected and nothing was recorded: the name without a keyword (3), a misspelt name (1), a folder deeper than depth 2 (1), no name at all (1), a path only, before the path rule existed (1), and one question that was not about a project. The matching rule is the same for every agent; this release widens it.

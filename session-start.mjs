@@ -4,7 +4,7 @@ import path from 'node:path';
 import {
   runHook, readInput, hookEnv, emit, inScope, normalizeWinPath, isInteractive, statePaths, writeState, removeFile, maybeDump, historyDir,
   resolveAnchor, readerBody, readerTotalMax, sessionInstructionFor, VALID_SOURCES, AGENT, lastWorkerLine, t, appendLog, runRetention, retentionLogLine,
-  trackerDbReadInstruction, statusFormatFor, hasArtifactTools, hasSessionContext, writePending,
+  trackerDbReadInstruction, statusFormatFor, hasArtifactTools, hasSessionContext, writePending, emitAgyContext,
 } from './common.mjs';
 
 const STALE_MS = 7 * 24 * 60 * 60 * 1000;
@@ -86,5 +86,6 @@ runHook(async () => {
     emit({ additional_context: text, hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: text } });
     return;
   }
+  if (AGENT === 'agy') { emitAgyContext(ctx); return; } // the STATUS instruction comes from PreInvocation (prompt-submit) in the same turn
   emit({ hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: ctx } });
 });

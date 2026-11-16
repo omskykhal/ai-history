@@ -6,7 +6,7 @@ import {
   maybeDump, mask, oneLine, confFileExists, historyDir, writeAtomic, statusFormatFor, statusHeader, missingHeadings,
   agentConfName, t, sessionStatusPath, AGENT, ymd, hms,
   extractTracker, trackerEligibility, mergeTracker, writeTracker, emptyTracker, TRACKER_URL_RE, trackerFormatFor, trackerRulesFor, PUBLISH_INSTRUCTION,
-  trackerMdPath, hasToolContext, readPending, emitStopBlock, kimiLastMessage,
+  trackerMdPath, hasToolContext, readPending, emitStopBlock, kimiLastMessage, agyLastMessage, agyCloseTurn,
 } from './common.mjs';
 import { writeTrackerHtml, writeTrackerMd, sha12 } from './tracker-build.mjs';
 import { parseChecklistResults } from './tracker-md.mjs';
@@ -132,12 +132,19 @@ runHook(async () => {
   // Grok sends one more observe-only Stop when the session ends (not a turn end)
   if (AGENT === 'grok' && (data.reason === 'channel_closed' || data.reason === 'shutdown')) return;
   const r = resolveAnchor(data, env);
-  if (!r) return;
+  if (!r) { if (AGENT === 'agy') agyCloseTurn(data.session_id, env); return; }
   const { anchor, state } = r;
   const sid8 = String(data.session_id).slice(0, 8);
   const L = t(env);
 
   let msg = typeof data.last_assistant_message === 'string' ? data.last_assistant_message : '';
+  if (!msg && AGENT === 'agy') {
+    // agy's Stop input has no reply text: read it from the transcript, with a short retry in case the write is late
+    for (let i = 0; i < 4 && !msg; i++) {
+      msg = agyLastMessage(data.transcript_path) || '';
+      if (!msg && i < 3) await new Promise((res) => setTimeout(res, 200));
+    }
+  }
   if (!msg) msg = tailFromTranscript(data.transcript_path);
   // Grok clips the reply at 32,768 characters. A cut-off STATUS / TRACKER is read from the transcript; if that fails, nothing is demanded.
   let clipped = AGENT === 'grok' && /… \[\+\d+ chars\]$/.test(msg);
@@ -201,7 +208,10 @@ runHook(async () => {
   // so the chain ends whatever the input says. Background agents are left out.
   const cursorOk = AGENT !== 'cursor' || (data.status === 'completed' && !(state && state.cursorFollowupSent)
     && !(state && state.background) && !confFileExists('NO_BLOCK', env));
-  const canBlock = () => state && !data.agent_id && cursorOk && !clipped
+  // agy: nothing is demanded after a turn that ended on an error or an interruption (a normal end was measured as NO_TOOL_CALL)
+  const agyOk = AGENT !== 'agy' || (!(typeof data.error === 'string' && data.error.trim())
+    && !/abort|cancel|interrupt|error|fail|limit|user/i.test(String(data.terminationReason || '')));
+  const canBlock = () => state && !data.agent_id && cursorOk && agyOk && !clipped
     && data.stop_hook_active !== true
     && !confFileExists(agentConfName('NO_BLOCK'), env)
     && env.AUTO_HISTORY_NO_BLOCK !== '1'
@@ -251,6 +261,7 @@ runHook(async () => {
       writeState(data.session_id, { ...rest, blockedAt: null }, env);
     }
   }
+  if (AGENT === 'agy') agyCloseTurn(data.session_id, env); // the turn is over (a correction request returns above and leaves it open)
 });
 
 // md step: when CHECKLIST.md differs from what the hook wrote (edited) and this content was not handled yet,

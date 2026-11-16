@@ -28,6 +28,7 @@ Close the laptop mid-task, come back tomorrow, open Claude Code, Codex, Grok, Ki
 | Claude Code | hooks support (`SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `Stop`, `SessionEnd`) |
 | OpenAI Codex CLI | 0.160 or newer with `hooks` enabled (`codex features list` → `hooks stable true`), optional |
 | Grok, Kimi Code, Cursor | Tested with Grok 1.0.70, Kimi Code 2.3.3 and Cursor 3.20.21, optional. See [Other agents](#other-agents-grok-kimi-cursor-060) |
+| Antigravity CLI (`agy`) | Tested with agy 1.5.9 on Windows, optional. See [Antigravity CLI](#antigravity-cli-agy-0130) |
 | OS | **Windows** and **Linux** (tested: plugin install and update via `claude plugin update`, the six hooks, a `claude -p` e2e run and all three test suites, on 0.11.0, 2026-11-10). macOS: path handling is implemented but **untested** |
 
 ## Install
@@ -50,6 +51,8 @@ node install.mjs --codex-hooks
 # optional: Kimi Code (adds 6 [[hooks]] to ~/.kimi-code/config.toml) and Grok (session start hook)
 node install.mjs --kimi-hooks
 node install.mjs --grok-hooks
+# optional: Antigravity CLI, `agy` (adds one key to ~/.gemini/config/hooks.json)
+node install.mjs --agy-hooks
 # 3) optional: keep .ai-history/ out of every git repo via git's global excludes file
 node install.mjs --git-ignore
 # check
@@ -70,6 +73,7 @@ node install.mjs --uninstall           # Claude Code entries only
 node install.mjs --codex-hooks-remove  # Codex entries only
 node install.mjs --kimi-hooks-remove   # Kimi entries only
 node install.mjs --grok-hooks-remove   # Grok file only
+node install.mjs --agy-hooks-remove    # Antigravity CLI key only
 ```
 
 Project folders keep their `.ai-history/` folders; delete them yourself if you no longer want them.
@@ -249,6 +253,25 @@ The history files, the STATUS block, the one-time nudge, the resume command and 
 - `node import-cursor.mjs <project folder>` copies earlier Cursor conversations into `.ai-history/cursor-import-<id8>.md`.
 
 Status: logging, agent labels and input fields were checked with one real `grok -p` and `kimi -p` run on Windows, and Cursor logging in one real project. Whether the model acts on the injected text in a stand-alone interactive Grok or Kimi session, and Cursor's follow-up message, have not been observed yet.
+
+## Antigravity CLI: agy (0.13.0)
+
+`node install.mjs --agy-hooks` adds one key, `ai-history`, to `~/.gemini/config/hooks.json` (other keys are kept, a backup is written when the file existed). Log lines and STATUS files are labelled `agy`.
+
+| ai-history step | agy event | Notes |
+|---|---|---|
+| Earlier history and `[Status]` | `SessionStart` | injected as a system message |
+| Prompt log, project match, STATUS instruction | `PreInvocation` | agy fires it before every model call; only the first call of a request is handled |
+| Tool log | `PostToolUse` | `run_command`, `write_file`, `edit_file`, `read_file` and their `CommandLine` / `Path` arguments |
+| STATUS save, one-time nudge | `Stop` | the reply is read from the conversation transcript; the nudge uses `decision: "continue"` |
+
+- `PreToolUse` is not registered: agy expects a permission decision from that hook, and ai-history does not take part in permissions. Tool calls are logged when they finish.
+- agy has no session-end event, so there is no `[exit]` line. The resume command (`agy --conversation <id>`) is written in the STATUS header.
+- A conversation continued in a new process (`agy -c`) does not fire `SessionStart` again; the session keeps its project from the saved state.
+- The Antigravity desktop app and IDE read the same `hooks.json`, so their sessions are logged too, labelled `agy`.
+- To turn off the nudge, create `NO_BLOCK_AGY` in the conf folder.
+
+Status: checked on Windows with agy 1.5.9 in print mode (`agy -p`, then `agy -c -p`): the `[Status]` report, the tool log, the STATUS file and the second turn all worked with the global `hooks.json`. The interactive TUI, the desktop app and the IDE have not been observed yet.
 
 ## Claude Code plugin
 

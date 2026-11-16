@@ -5,6 +5,7 @@
 //   node install.mjs --codex-hooks-remove [--codex-file <path>] [--dry-run]                    remove only our entries
 //   node install.mjs --kimi-hooks | --kimi-hooks-remove [--kimi-file <path>] [--dry-run]         our 6 hooks in ~/.kimi-code/config.toml (--agent kimi)
 //   node install.mjs --grok-hooks | --grok-hooks-remove [--grok-file <path>] [--dry-run]         Grok session start hook (other events come from --install)
+//   node install.mjs --agy-hooks | --agy-hooks-remove [--agy-file <path>] [--dry-run]            Antigravity CLI: our 4 hooks in ~/.gemini/config/hooks.json (--agent agy)
 //   node install.mjs --git-ignore [--dry-run]                                                  add ".ai-history/" to git's global excludes file
 //   node install.mjs --migrate-dirname [--root <dir>] [--dry-run]                              rename legacy .claude-history → .ai-history (depth ≤ 2)
 //   node install.mjs --config [--root <dir>] [--lang en|ko] [--tracker on|off|default] [--keep-days N] [--archive-days N] [--sessions-days N]
@@ -385,6 +386,53 @@ function grokHooksRemove(file, dry) {
   return { mode: 'grok-hooks-remove', file, removed: true };
 }
 
+// Antigravity CLI (agy): one top-level key (AGY_KEY) in ~/.gemini/config/hooks.json; other keys are left alone.
+// Its event names differ (a request is PreInvocation, there is no session end). PreToolUse is not registered: it must answer with a
+// permission decision, and tool use is logged from PostToolUse anyway. The Antigravity desktop app and IDE read the same file.
+const AGY_KEY = 'ai-history';
+function agyHooksObject() {
+  const h = (script, timeout) => ({ type: 'command', command: `${cmd(script)} --agent agy`, timeout });
+  return {
+    SessionStart: [h('session-start.mjs', 5)],
+    PreInvocation: [h('prompt-submit.mjs', 5)],
+    PostToolUse: [{ matcher: '*', hooks: [h('post-tool.mjs', 5)] }],
+    Stop: [h('stop.mjs', 10)],
+  };
+}
+function readJsonObject(file) {
+  if (!fs.existsSync(file)) return null;
+  const raw = fs.readFileSync(file, 'utf-8').replace(/^﻿/, '');
+  if (!raw.trim()) return {};
+  const obj = JSON.parse(raw);
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) throw new Error(`${file}: top level is not an object, stopping`);
+  return obj;
+}
+function agyHooks(file, dry) {
+  const before = readJsonObject(file);
+  const next = { ...(before || {}), [AGY_KEY]: agyHooksObject() };
+  if (dry) return { mode: 'agy-hooks', dryRun: true, file, content: next };
+  if (before && JSON.stringify(before) === JSON.stringify(next)) return { mode: 'agy-hooks', file, unchanged: true };
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const backup = before ? `${file}.bak.ai-history.${tsNow()}` : null;
+  if (backup) fs.copyFileSync(file, backup);
+  const tmp = `${file}.${process.pid}.tmp`;
+  fs.writeFileSync(tmp, `${JSON.stringify(next, null, 2)}\n`, 'utf-8');
+  JSON.parse(fs.readFileSync(tmp, 'utf-8'));
+  fs.renameSync(tmp, file);
+  return { mode: 'agy-hooks', file, backup, events: Object.keys(next[AGY_KEY]), otherKeys: Object.keys(next).filter((k) => k !== AGY_KEY) };
+}
+function agyHooksRemove(file, dry) {
+  const before = readJsonObject(file);
+  if (!before || !(AGY_KEY in before)) return { mode: 'agy-hooks-remove', file, removed: false, reason: before ? 'not-registered' : 'absent' };
+  const next = { ...before };
+  delete next[AGY_KEY];
+  if (dry) return { mode: 'agy-hooks-remove', dryRun: true, file, after: next };
+  const backup = `${file}.bak.ai-history.${tsNow()}`;
+  fs.copyFileSync(file, backup);
+  fs.writeFileSync(file, `${JSON.stringify(next, null, 2)}\n`, 'utf-8'); // an empty object is left when no other key remains (the file is not deleted)
+  return { mode: 'agy-hooks-remove', file, backup, removed: true, otherKeys: Object.keys(next) };
+}
+
 function argVal(args, k) { const i = args.indexOf(k); return i >= 0 && args[i + 1] && !args[i + 1].startsWith('--') ? args[i + 1] : null; }
 
 function main() {
@@ -402,6 +450,9 @@ function main() {
   }
   const kimiFile = path.resolve(argVal(args, '--kimi-file') || path.join(os.homedir(), '.kimi-code', 'config.toml'));
   const grokFile = path.resolve(argVal(args, '--grok-file') || path.join(os.homedir(), '.grok', 'hooks', 'ai-history.json'));
+  const agyFile = path.resolve(argVal(args, '--agy-file') || path.join(os.homedir(), '.gemini', 'config', 'hooks.json'));
+  if (args.includes('--agy-hooks')) return print(agyHooks(agyFile, dry));
+  if (args.includes('--agy-hooks-remove')) return print(agyHooksRemove(agyFile, dry));
   if (args.includes('--kimi-hooks')) return print(kimiHooks(kimiFile, dry));
   if (args.includes('--kimi-hooks-remove')) return print(kimiHooksRemove(kimiFile, dry));
   if (args.includes('--grok-hooks')) return print(grokHooks(grokFile, dry));
@@ -427,6 +478,7 @@ function main() {
     '  --codex-hooks-remove [--codex-file <path>] [--dry-run]',
     '  --kimi-hooks | --kimi-hooks-remove [--kimi-file <path>] [--dry-run]',
     '  --grok-hooks | --grok-hooks-remove [--grok-file <path>] [--dry-run]',
+    '  --agy-hooks | --agy-hooks-remove [--agy-file <path>] [--dry-run]',
     '  --git-ignore [--dry-run]',
     '  --migrate-dirname [--root <dir>] [--dry-run]',
     '  --config [--root <dir>] [--lang en|ko] [--tracker on|off|default] [--keep-days N] [--archive-days N] [--sessions-days N]',

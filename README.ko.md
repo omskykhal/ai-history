@@ -28,6 +28,7 @@ Claude Code 에서 한 줄로 설치(다른 에이전트는 설치 스크립트,
 | Claude Code | 훅 지원(`SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `Stop`, `SessionEnd`) |
 | OpenAI Codex CLI | 0.160 이상, `hooks` 사용 가능(`codex features list` → `hooks stable true`), 선택 |
 | Grok·Kimi Code·Cursor | Grok 1.0.70·Kimi Code 2.3.3·Cursor 3.20.21 로 확인, 선택. [다른 에이전트](#다른-에이전트-grokkimicursor060) 참고 |
+| Antigravity CLI(`agy`) | Windows 의 agy 1.5.9 로 확인, 선택. [Antigravity CLI](#antigravity-cli-agy0130) 참고 |
 | OS | **Windows**·**Linux**(검증됨: 플러그인 설치·갱신(`claude plugin update`)·훅 6개·`claude -p` e2e·자체 시험 3종 전부 통과, 0.11.0 기준 2026-11-10). macOS: 경로 처리는 구현돼 있으나 **미검증** |
 
 ## 설치
@@ -50,6 +51,8 @@ node install.mjs --codex-hooks
 # 선택: Kimi Code(~/.kimi-code/config.toml 에 [[hooks]] 6개)와 Grok(세션 시작 훅)
 node install.mjs --kimi-hooks
 node install.mjs --grok-hooks
+# 선택: Antigravity CLI `agy`(~/.gemini/config/hooks.json 에 키 하나 추가)
+node install.mjs --agy-hooks
 # 3) 선택: git 전역 제외 파일에 .ai-history/ 추가(모든 저장소에서 git status 에 안 잡힘)
 node install.mjs --git-ignore
 # 확인
@@ -70,6 +73,7 @@ node install.mjs --uninstall           # Claude Code 항목만
 node install.mjs --codex-hooks-remove  # Codex 항목만
 node install.mjs --kimi-hooks-remove   # Kimi 항목만
 node install.mjs --grok-hooks-remove   # Grok 파일만
+node install.mjs --agy-hooks-remove    # Antigravity CLI 키만
 ```
 
 각 프로젝트의 `.ai-history/` 폴더는 남습니다. 필요 없으면 직접 삭제하세요.
@@ -249,6 +253,25 @@ API 키처럼 보이는 문자열(`AIza…`, `sk-…`, `ghp_…`, `Bearer …`, 
 - `node import-cursor.mjs <프로젝트 폴더>` 는 지난 Cursor 대화를 `.ai-history/cursor-import-<id8>.md` 로 옮깁니다.
 
 상태: Windows 에서 실제 `grok -p`·`kimi -p` 각 1회와 실제 프로젝트의 Cursor 기록으로 로그·작업자 표시·입력 필드를 확인했습니다. 단독 대화형 Grok·Kimi 에서 모델이 주입 글을 따르는지와 Cursor 후속 메시지는 아직 관찰하지 못했습니다.
+
+## Antigravity CLI: agy(0.13.0)
+
+`node install.mjs --agy-hooks` 는 `~/.gemini/config/hooks.json` 에 `ai-history` 키 하나를 추가합니다(다른 키는 보존, 파일이 이미 있었으면 백업 생성). 로그 줄과 STATUS 파일의 작업자 표시는 `agy` 입니다.
+
+| ai-history 단계 | agy 이벤트 | 비고 |
+|---|---|---|
+| 이전 기록과 `[현황]` | `SessionStart` | 시스템 메시지로 주입 |
+| 요청 기록·프로젝트 판정·STATUS 지시 | `PreInvocation` | agy 는 모델 호출마다 이 이벤트를 보냅니다. 한 요청의 첫 호출만 처리합니다 |
+| 도구 기록 | `PostToolUse` | `run_command`·`write_file`·`edit_file`·`read_file` 과 그 인자 `CommandLine`·`Path` |
+| STATUS 저장·누락 시 1회 요구 | `Stop` | 응답은 대화 기록 파일에서 읽고, 요구는 `decision: "continue"` 로 보냅니다 |
+
+- `PreToolUse` 는 등록하지 않습니다. agy 는 이 훅에서 권한 판정을 받아야 하는데 ai-history 는 권한에 관여하지 않습니다. 도구 호출은 끝난 뒤에 기록합니다.
+- agy 에는 세션 종료 이벤트가 없어 `[exit]` 줄이 없습니다. 재개 명령(`agy --conversation <id>`)은 STATUS 머리에 적힙니다.
+- 새 프로세스에서 이어 간 대화(`agy -c`)는 `SessionStart` 를 다시 보내지 않습니다. 세션은 저장된 상태로 프로젝트를 유지합니다.
+- Antigravity 데스크톱 앱과 IDE 도 같은 `hooks.json` 을 읽으므로 그 세션도 `agy` 표시로 기록됩니다.
+- 요구를 끄려면 설정 폴더에 `NO_BLOCK_AGY` 파일을 만듭니다.
+
+상태: Windows 의 agy 1.5.9 한 번 실행 모드(`agy -p`, 이어서 `agy -c -p`)에서 `[현황]` 보고, 도구 기록, STATUS 파일, 둘째 턴이 전역 `hooks.json` 으로 동작하는 것을 확인했습니다. 대화형 화면(TUI), 데스크톱 앱, IDE 는 아직 관찰하지 못했습니다.
 
 ## Claude Code 플러그인
 

@@ -5,7 +5,7 @@ import {
   AGENT, historyDirName, lastWorkerLine, t, runRetention, retentionLogLine,
   trackerEligibility, trackerInstruction, trackerDbReadInstruction,
   hasArtifactTools, hasToolContext, emitPromptContext, readPending, writePending, kimiLateCapture,
-  matchProjectPath, hasAnchorSource, injectLimits, projectIndexLines, readIndexMark, writeIndexMark, SEARCH_TOOL,
+  matchProjectPath, hasAnchorSource, injectLimits, projectIndexLines, readIndexMark, writeIndexMark, SEARCH_TOOL, agyNewTurn,
 } from './common.mjs';
 
 runHook(async () => {
@@ -18,6 +18,8 @@ runHook(async () => {
   const raw = [data.prompt, data.user_prompt, data.message].find((v) => typeof v === 'string');
   // Cursor submits a Stop follow-up as a user message. It is not a user request: no log line, no state reset.
   if (AGENT === 'cursor' && raw !== undefined && raw.startsWith('[ai-history]')) return;
+  // agy runs this hook on PreInvocation (before every model call): from the second call of the same request on, do nothing
+  if (AGENT === 'agy' && !agyNewTurn(data, env)) return;
   if (AGENT === 'kimi') kimiLateCapture(data, env); // handle the previous turn's corrected reply before the anchor can change
   const interactive = !data.agent_id && isInteractive(data, env);
 

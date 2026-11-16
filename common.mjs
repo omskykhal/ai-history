@@ -148,9 +148,37 @@ function normalizeKimiInput(data) {
   if (out.source !== undefined && !VALID_SOURCES.includes(out.source)) out.source = 'startup';
   return out;
 }
+// Antigravity CLI (agy) input, measured on agy 1.5.9: camelCase fields, tool arguments start with a capital (Path, CommandLine).
+// PreInvocation fires before every model call, so the prompt is filled in for that event only; agyNewTurn decides whether it is a new request.
+function normalizeAgyInput(data) {
+  const out = { ...data };
+  if (!out.session_id && out.conversationId) out.session_id = out.conversationId;
+  if (!out.hook_event_name && out.hookEventName) out.hook_event_name = out.hookEventName;
+  if (!out.transcript_path && out.transcriptPath) out.transcript_path = out.transcriptPath;
+  if (!out.cwd && Array.isArray(out.workspacePaths)) out.cwd = out.workspacePaths.find((p) => typeof p === 'string' && p) || '';
+  if (out.hook_event_name === 'SessionStart' && out.source === undefined) out.source = 'startup';
+  if (out.hook_event_name === 'PreInvocation' && out.prompt === undefined && typeof out.lastUserInput === 'string') out.prompt = out.lastUserInput;
+  const tc = out.toolCall && typeof out.toolCall === 'object' ? out.toolCall : null;
+  if (tc) {
+    if (!out.tool_name && typeof tc.name === 'string') out.tool_name = tc.name;
+    if (!out.tool_input) {
+      const a = tc.args && typeof tc.args === 'object' ? tc.args : {};
+      const ti = { ...a };
+      const fp = [a.Path, a.AbsolutePath, a.TargetFile, a.FilePath].find((v) => typeof v === 'string' && v);
+      if (fp && ti.file_path === undefined) ti.file_path = fp;
+      if (typeof a.CommandLine === 'string' && ti.command === undefined) ti.command = a.CommandLine;
+      if (typeof a.Cwd === 'string' && ti.cwd === undefined) ti.cwd = a.Cwd;
+      out.tool_input = ti;
+    }
+  }
+  if (out.stop_hook_active === undefined && out.continuationActive !== undefined) out.stop_hook_active = out.continuationActive === true;
+  if (out.stop_reason === undefined && typeof out.terminationReason === 'string') out.stop_reason = out.terminationReason;
+  return out;
+}
 export function normalizeHookInput(data, env = hookEnv()) {
   if (!data) return data;
   if (AGENT === 'kimi') return normalizeKimiInput(data);
+  if (AGENT === 'agy') return normalizeAgyInput(data);
   if (typeof data.cursor_version !== 'string') {
     if (AGENT === 'grok' || (AGENT === 'claude' && typeof data.workspaceRoot === 'string' && typeof data.hookEventName === 'string')) return normalizeGrokInput(data);
     return data;
@@ -190,11 +218,21 @@ export function runHook(main) {
   Promise.resolve()
     .then(main)
     .catch((e) => warn(e && e.message))
-    .finally(() => { process.exitCode = 0; });
+    .finally(() => {
+      // agy parses hook output as JSON: send an empty object when there is nothing to say
+      if (AGENT === 'agy' && !emitted) { try { process.stdout.write('{}'); } catch { /* ignore */ } }
+      process.exitCode = 0;
+    });
 }
 
+let emitted = false;
 export function emit(obj) {
+  emitted = true;
   process.stdout.write(JSON.stringify(obj));
+}
+// agy context injection (SessionStart and PreInvocation): a systemMessage step, which stays in the conversation
+export function emitAgyContext(ctx) {
+  emit({ injectSteps: [{ systemMessage: { systemMessage: ctx } }] });
 }
 
 // Path normalization.
@@ -284,7 +322,7 @@ function nestedMarkerHit(file, env, src = process.env) {
 export function isInteractive(data, env = process.env, agent = AGENT) {
   if (env.AUTO_HISTORY_DISABLE === '1') return false;
   if (agent === 'cursor') return !(data && data.is_background_agent === true);
-  if (agent === 'codex' || agent === 'grok' || agent === 'kimi') {
+  if (agent === 'codex' || agent === 'grok' || agent === 'kimi' || agent === 'agy') {
     // spawned inside a Claude Code session → non-interactive (log only)
     if (env.CLAUDECODE === '1' || env.CLAUDE_CODE_ENTRYPOINT !== undefined) return false;
     return !nestedMarkerHit(agentConfName('NESTED_MARKERS', agent), env);
@@ -305,13 +343,14 @@ export function agentConfName(name, agent = AGENT) {
 }
 
 // Where each tool lets a hook put text in front of the model:
-// claude, codex: session start, prompt / cursor: session start, after a tool / grok: after a tool, Stop / kimi: prompt, Stop
+// claude, codex, agy: session start, prompt / cursor: session start, after a tool / grok: after a tool, Stop / kimi: prompt, Stop
 export const hasToolContext = (agent = AGENT) => agent === 'cursor' || agent === 'grok';
-export const hasSessionContext = (agent = AGENT) => agent === 'claude' || agent === 'codex' || agent === 'cursor';
+export const hasSessionContext = (agent = AGENT) => agent === 'claude' || agent === 'codex' || agent === 'cursor' || agent === 'agy';
 export const hasArtifactTools = (agent = AGENT) => agent === 'claude' || agent === 'codex';
 
 export function emitPromptContext(ctx, agent = AGENT) {
   if (agent === 'kimi') { process.stdout.write(ctx); return; } // Kimi appends plain text as is; from JSON it reads only `message`
+  if (agent === 'agy') { emitAgyContext(ctx); return; }
   emit({ hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext: ctx } });
 }
 export function emitToolContext(ctx, agent = AGENT) {
@@ -323,7 +362,65 @@ export function emitStopBlock(reason, agent = AGENT) {
   // Cursor turns Claude's decision + reason into an automatic follow-up user message (third-party hooks docs); its native field is sent too
   if (agent === 'cursor') emit({ followup_message: reason, decision: 'block', reason });
   else if (agent === 'kimi') emit({ hookSpecificOutput: { hookEventName: 'Stop', permissionDecision: 'deny', permissionDecisionReason: reason } });
+  else if (agent === 'agy') emit({ decision: 'continue', reason }); // the reason goes in as a system message and the same turn goes on
   else emit({ decision: 'block', reason });
+}
+
+// agy fires PreInvocation before every model call. True only for a new request: call number 0, the previous turn was closed, or the prompt changed.
+// Marker state/<session>.turn = { key, open }. Stop sets open=false when the turn ends (it stays open while a correction is being asked for).
+function agyTurnKey(s) {
+  let h = 5381;
+  const text = String(s == null ? '' : s);
+  for (let i = 0; i < text.length; i++) h = ((h << 5) + h + text.charCodeAt(i)) >>> 0;
+  return `${text.length}:${h.toString(36)}`;
+}
+export function agyNewTurn(data, env = process.env) {
+  try {
+    const p = statePaths(data.session_id, env);
+    let prev = null;
+    try { prev = JSON.parse(fs.readFileSync(p.turn, 'utf-8')); } catch { /* none yet */ }
+    const key = agyTurnKey(data.prompt);
+    const fresh = Number(data.invocationNum) === 0 || !prev || prev.open !== true || prev.key !== key;
+    if (fresh) {
+      fs.mkdirSync(p.dir, { recursive: true });
+      writeAtomic(p.turn, JSON.stringify({ key, open: true, at: new Date().toISOString() }));
+    }
+    return fresh;
+  } catch {
+    return Number(data.invocationNum) === 0;
+  }
+}
+export function agyCloseTurn(sid, env = process.env) {
+  try {
+    const p = statePaths(sid, env);
+    const prev = JSON.parse(fs.readFileSync(p.turn, 'utf-8'));
+    if (prev && prev.open === true) writeAtomic(p.turn, JSON.stringify({ ...prev, open: false }));
+  } catch { /* no marker */ }
+}
+// agy's Stop input has no reply text. Read the last model reply (a PLANNER_RESPONSE without tool calls) from the transcript (transcript_full.jsonl).
+export function agyLastMessage(file) {
+  try {
+    if (!file || !fs.existsSync(file)) return null;
+    const size = fs.statSync(file).size;
+    const n = Math.min(size, 256 * 1024);
+    const buf = Buffer.alloc(n);
+    const fd = fs.openSync(file, 'r');
+    try { fs.readSync(fd, buf, 0, n, size - n); } finally { fs.closeSync(fd); }
+    const lines = buf.toString('utf-8').split('\n');
+    for (let i = lines.length - 1; i >= 0; i--) {
+      if (!lines[i].trim()) continue;
+      let o;
+      try { o = JSON.parse(lines[i]); } catch { continue; }
+      if (!o || o.source === 'SYSTEM' || o.source === 'SYSTEM_SDK') continue; // system messages injected by hooks
+      if (o.source !== 'MODEL') return null; // reached the user input: no reply for this turn yet
+      if (o.type !== 'PLANNER_RESPONSE') continue; // tool results (GENERIC) and the like
+      if (Array.isArray(o.tool_calls) && o.tool_calls.length) return null; // still calling tools: not the final reply
+      return typeof o.content === 'string' && o.content.trim() ? o.content : null;
+    }
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 // Context held per session until the tool's next delivery point: { reader, instruction }
@@ -402,7 +499,7 @@ function safeSid(sid) {
 export function statePaths(sid, env = process.env) {
   const dir = getStateDir(env);
   const s = safeSid(sid);
-  return { dir, json: path.join(dir, `${s}.json`), tool: path.join(dir, `${s}.tool`), tracker: path.join(dir, `${s}.tracker`), ctx: path.join(dir, `${s}.ctx`), idx: path.join(dir, `${s}.idx`) };
+  return { dir, json: path.join(dir, `${s}.json`), tool: path.join(dir, `${s}.tool`), tracker: path.join(dir, `${s}.tracker`), ctx: path.join(dir, `${s}.ctx`), idx: path.join(dir, `${s}.idx`), turn: path.join(dir, `${s}.turn`) };
 }
 // Marker of a session that has no project yet (0.12.0): { at, prompt, shownAt }. It limits the project list to once per session and carries
 // the prompt over to the log when the first tool path decides the anchor.
@@ -1095,6 +1192,7 @@ export function resumeCommand(sid, agent = AGENT) {
   if (agent === 'codex') return `codex resume ${id}`;
   if (agent === 'grok') return `grok --resume ${id}`;
   if (agent === 'kimi') return `kimi -S ${id.startsWith('session_') ? id : `session_${id}`}`;
+  if (agent === 'agy') return `agy --conversation ${id}`;
   return '';
 }
 
@@ -1247,8 +1345,8 @@ export function tailLines(file, n) {
 }
 
 // Tool names and input keys differ per agent (Grok run_terminal_command / target_file, Cursor Shell / StrReplace / path, Kimi path).
-const SHELL_TOOLS = ['Bash', 'PowerShell', 'Shell', 'run_terminal_command'];
-const EDIT_TOOLS = ['Write', 'Edit', 'MultiEdit', 'NotebookEdit', 'StrReplace', 'EditNotebook', 'write', 'search_replace', 'hashline_edit'];
+const SHELL_TOOLS = ['Bash', 'PowerShell', 'Shell', 'run_terminal_command', 'run_command'];
+const EDIT_TOOLS = ['Write', 'Edit', 'MultiEdit', 'NotebookEdit', 'StrReplace', 'EditNotebook', 'write', 'search_replace', 'hashline_edit', 'write_file', 'edit_file'];
 const READ_TOOLS = ['Read', 'read_file'];
 const SEARCH_TOOLS = ['Glob', 'Grep', 'grep', 'list_dir', 'List'];
 const AGENT_TOOLS = ['Agent', 'Task', 'spawn_subagent'];
@@ -1417,7 +1515,7 @@ export function extractTracker(msg) {
 
 const tStr = (v) => (typeof v === 'string' ? v.slice(0, TRACKER_STR_MAX) : null);
 const AI_STATUS = ['ok', 'fail', '-'];
-export const AI_BY = ['claude', 'codex', 'grok', 'kimi', 'cursor'];
+export const AI_BY = ['claude', 'codex', 'grok', 'kimi', 'cursor', 'agy'];
 const USER_STATUS = ['ok', 'fail', ''];
 export function emptyTracker(now = new Date().toISOString()) {
   return {
