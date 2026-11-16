@@ -83,9 +83,14 @@ Only folders **inside your root** (`--root`) get a `.ai-history/`. Nothing is ev
 A symlink (or Windows junction) under the root that points at a directory counts as a project folder too (0.11.2); the session cwd and the name mention both use the link path.
 
 1. A project named in your prompt: an alias from `ALIASES`, or `<folder name> project` / `project <folder name>` (`folder` also works for depth-1 folders); `project called <name>` / `folder named <name>` work too, and in Korean one of `라는`·`이라는`·`란`·`이란` may sit between the name and the keyword. The folder must be at depth 1 or 2 under the root. When no name is found, an absolute path in the prompt is used instead: the path of a project folder itself counts like its name (`C:\Projects\MyApp is the project folder, fix …`), and a path inside a project counts only while the session has no anchor yet. Quote a path whose folder name has spaces.
+   - The next two rules apply only while the session has no project yet (opened outside the root, nothing named so far); once it has one, only an alias, the keyword form or a folder path moves it.
+   - **A project that already has history needs no keyword (0.12.0).** `shop4office: fix the calendar` is enough. To keep everyday words out, a name with a digit, `-`, `.`, `_` or an inner capital, or one of 6+ characters, matches anywhere in the prompt; a shorter plain word (`mind`) only as the first word; depth-2 folders only when the name has a digit or symbol.
+   - **A misspelt name next to the keyword is accepted (0.12.0)** for projects with history: `lobbyservicec project` → `lobbyservice`. One letter off for names of 5-8 characters, two for 9+, ASCII names only, and only when exactly one folder is the closest. The agent is told which project the name was read as and says so in its first line.
 2. The working directory, when it really changed since the last prompt and is inside the root (a sub-folder of the current anchor keeps the anchor).
 3. The anchor already recorded for this session.
 4. No anchor yet and the working directory is inside the root → adopt it.
+
+**When none of these gives a project (0.12.0)** — typically a session opened in your home folder with a prompt like "check what I was working on" — the hook shows the agent, once per session, the list of projects that have history (name, path, last worker and time, most recent first, 15 lines) and tells it to pick the one the request is about, read that folder's `STATUS.md`, and ask you when it cannot tell. The first tool call that touches a path inside a project (a file path, or an absolute path in a shell command) then makes that project the anchor, and the prompt is carried over to its log (a folder without history only when the tool edits or runs a shell command there, not when it just reads). Grok and Cursor cannot receive text at prompt time, so they get the tool-path anchor without the list. `index=0` in `INJECT` turns the list and the tool-path anchor off.
 
 So the usual way of working is: open a terminal **anywhere**, start `claude` or `codex`, and say *"MyApp project, what did we do last time? Continue."* The hook finds `MyApp`, injects its history, and keeps writing there until you name another project.
 
@@ -211,7 +216,7 @@ All files live next to the scripts (or in `AUTO_HISTORY_CONF_DIR`). Missing file
 | `ROOT` / `AUTO_HISTORY_ROOT` | boundary folder (default `~/Projects`) |
 | `LANG` / `AUTO_HISTORY_LANG` | `en` (default) or `ko`: language of injected instructions, STATUS headings and header |
 | `SUGGEST_ASK` / `AUTO_HISTORY_SUGGEST_ASK` | how often the agent asks about Suggested items: `always` (default: a choice in every reply that writes them), `start` (only at session start / project mention), `off` (write only). The section itself is always written |
-| `INJECT` / `AUTO_HISTORY_INJECT` | injection sizes: `today=15`, `yday=5` (lines), `line=200`, `total=8000`, `status=4000` (chars). One per line in the file, comma-separated in the env var |
+| `INJECT` / `AUTO_HISTORY_INJECT` | injection sizes: `today=15`, `yday=5` (lines), `line=200`, `total=8000`, `status=4000` (chars), `index=15` (lines of the project list for a session without a project; `0` = off). One per line in the file, comma-separated in the env var |
 | `RETENTION` / `AUTO_HISTORY_KEEP_DAYS`, `AUTO_HISTORY_ARCHIVE_DAYS`, `AUTO_HISTORY_SESSIONS_DAYS` | lines `keep=30`, `archive=365`, `sessions=7` (days). `keep=0` disables log rotation, `archive=0` keeps `.gz` forever, `sessions=0` keeps session copies |
 | `ALIASES` | `phrase1\|phrase2 => relative\path\under\root`, one target per line. See `ALIASES.example` |
 | `INTERACTIVE_ENTRYPOINTS` | Claude entrypoints treated as interactive (`cli`) |

@@ -149,6 +149,21 @@ check('Kimi 종료 기록', logOf(kp).includes(`재개: kimi -S ${ksid}`) && log
 const kn = run('prompt-submit.mjs', k({ prompt: '중첩' }, 'session_nested00-0000'), KA, { ...baseEnv, CLAUDECODE: '1' });
 check('Claude 안의 Kimi: 기록만', kn.stdout === '', kn.stdout);
 
+// ---- Kimi: 홈 폴더(경계 밖)에서 열고 프로젝트 이름 없이 요청 → 목록 안내 1회, 첫 도구 경로로 앵커
+const kHome = path.join(box, 'home'); fs.mkdirSync(kHome, { recursive: true });
+const kid2 = 'aaaa1111-0887-4eff-869f-39f29ebe4d2c';
+const k6 = run('prompt-submit.mjs', k({ prompt: '마지막으로 작업했던거 체크해줘' }, `session_${kid2}`, kHome), KA);
+check('Kimi 기준 없음: 목록 안내 평문', k6.stdout.includes('기록 기준 프로젝트가 정해지지 않았다') && k6.stdout.includes(`- kimip — ${kp}`) && k6.stdout.includes('STATUS:BEGIN') && !json(k6.stdout) && fs.existsSync(sp(kid2).idx), k6.stdout);
+const k7 = run('prompt-submit.mjs', k({ prompt: '그거 말이야' }, `session_${kid2}`, kHome), KA);
+check('Kimi 기준 없음: 둘째 요청은 출력 없음', k7.stdout === '', k7.stdout);
+const kLogBefore = logOf(kp);
+run('pre-tool.mjs', k({ tool_name: 'Read', tool_input: { path: path.join(kp, 'a.txt') } }, `session_${kid2}`, kHome), KA);
+const kNew = logOf(kp).slice(kLogBefore.length);
+check('Kimi 첫 도구 경로로 앵커·요청문 이월', kNew.includes(`[${kid2.slice(0, 8)}][kimi] [anchor] 지정`) && kNew.includes('[User] 그거 말이야') && kNew.includes('▶ [Read]') && !fs.existsSync(sp(kid2).idx), kNew);
+const kid3 = 'bbbb2222-0887-4eff-869f-39f29ebe4d2c';
+const k8 = run('prompt-submit.mjs', k({ prompt: 'kimipp 프로젝트 수정좀 하자' }, `session_${kid3}`, kHome), KA);
+check('Kimi 오타 이름: 가까운 프로젝트로 해석', k8.stdout.includes('`kimipp` 는 철자가 가장 가까운 `kimip` 프로젝트로 해석') && k8.stdout.includes('=== STATUS.md ==='), k8.stdout);
+
 // ---- Cursor: 프롬프트 단계 주입 불가 → postToolUse, 차단은 followup_message + loop_count 가드
 const cp = project('cursorp', true);
 const cp2 = project('cursorq', true);
@@ -289,7 +304,7 @@ run('prompt-submit.mjs', k({ prompt: `${path.join(pa, 'web', 'src', 'a.tsx')}에
 check('경로 지정: 앵커 없는 세션은 안쪽 경로(조사 붙음)도 인정', anchorOfSid(pid2) === C.normalizeWinPath(pa), anchorOfSid(pid2));
 const pid3 = 'ffff1b09-0887-4eff-869f-39f29ebe4d2c';
 const p3 = run('prompt-submit.mjs', k({ prompt: `${path.join(outside, 'a.png')} 이 그림 설명해줘 https://example.com/${path.basename(pa)}` }, `session_${pid3}`, outside), KA);
-check('경로 지정: 경계 밖 경로·URL 은 무시', anchorOfSid(pid3) === null && p3.stdout === '', `${anchorOfSid(pid3)} ${p3.stdout}`);
+check('경로 지정: 경계 밖 경로·URL 은 무시', anchorOfSid(pid3) === null && (p3.stdout === '' || p3.stdout.includes('기록 기준 프로젝트가 정해지지 않았다')), `${anchorOfSid(pid3)} ${p3.stdout}`); // 앵커 없음(목록 안내만)
 const pgrp = project('pgrp', true);
 const psub = project(path.join('pgrp', 'psub'), true);
 const pfolders = C.listCandidateFolders(baseEnv);

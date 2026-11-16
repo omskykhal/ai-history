@@ -5,7 +5,7 @@ import {
   AGENT, historyDirName, lastWorkerLine, t, runRetention, retentionLogLine,
   trackerEligibility, trackerInstruction, trackerDbReadInstruction,
   hasArtifactTools, hasToolContext, emitPromptContext, readPending, writePending, kimiLateCapture,
-  matchProjectPath, hasAnchorSource,
+  matchProjectPath, hasAnchorSource, injectLimits, projectIndexLines, readIndexMark, writeIndexMark, SEARCH_TOOL,
 } from './common.mjs';
 
 runHook(async () => {
@@ -24,13 +24,30 @@ runHook(async () => {
   // Project named in the prompt: interactive main session with a real prompt only
   const folders = interactive && raw !== undefined ? listCandidateFolders(env) : null;
   let hit = folders ? matchProjectMention(raw, listHistoryProjects(env), folders, loadAliases(env)) : null;
+  // A bare name or a misspelt name counts only while the session has no project yet, so an everyday word cannot move the anchor. Aliases and keyword mentions still do.
+  if (hit && hit.via && hasAnchorSource(data, env)) hit = null;
   // No name in the prompt → look for a project path. The folder itself counts like a name; a path inside it only while the session has no anchor.
   if (!hit && folders) {
     const ph = matchProjectPath(raw, folders, env);
     if (ph && (ph.exact || !hasAnchorSource(data, env))) hit = ph;
   }
   const r = resolveAnchor(data, env, { allowSwitch: !data.agent_id, mentioned: hit ? hit.dir : null, unrecorded: !!(hit && hit.recorded === false) });
-  if (!r) return;
+  if (!r) {
+    // No project for this session (opened outside the root, and the prompt named none or misspelt it): show the projects that have history,
+    // once per session, so the model can pick one. The marker is rewritten on every prompt — it holds the prompt that becomes the [User]
+    // line when the first tool path decides the anchor. INJECT index=0 turns all of this off.
+    const max = injectLimits(env).index;
+    if (!interactive || raw === undefined || !raw.trim() || /^\s*</.test(raw) || max === 0) return;
+    const prev = readIndexMark(data.session_id, env);
+    const canShow = !hasToolContext();
+    const lines = canShow && !(prev && prev.shownAt) ? projectIndexLines(env, max) : [];
+    const show = lines.length > 0; // Grok, Cursor: prompt-time output does not reach the model → marker only
+    const now = new Date().toISOString();
+    writeIndexMark(data.session_id, { at: now, prompt: oneLine(mask(oneLine(raw)), 120), shownAt: (prev && prev.shownAt) || (show ? now : null) }, env);
+    if (show) emitPromptContext(L.noProjectIndex(historyDirName(env), lines, `node "${SEARCH_TOOL}" <text> --all`, INSTRUCTION));
+    return;
+  }
+  removeFile(statePaths(data.session_id, env).idx); // the session has a project now; the marker is not needed
 
   // Tracker instruction for this anchor. The "tracker is off" hint goes out once per session (default-off since 0.11.0); the on-instruction every prompt.
   const elig = trackerEligibility(r.anchor, env);
@@ -65,6 +82,7 @@ runHook(async () => {
         + readerBody(hit.anchor, env, { sid8: String(data.session_id).slice(0, 8) });
     const lw = hit.recorded === false ? '' : lastWorkerLine(hit.anchor, env);
     if (lw) reader = `[ai-history] ${lw}\n${reader}`;
+    if (hit.via === 'fuzzy') reader = `${L.mentionFuzzy(hit.typed, hit.name)}\n${reader}`; // the name was misspelt: tell the model which project it was read as
     if (reader.length > readerTotalMax(env)) reader = reader.slice(0, readerTotalMax(env));
     mentionReader = reader;
   }

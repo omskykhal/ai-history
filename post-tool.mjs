@@ -1,7 +1,7 @@
 // PostToolUse hook: log the tool call end (+duration) and arm the "tools were used" marker for the Stop hook.
 import {
   runHook, readInput, hookEnv, resolveAnchor, appendLog, maybeDump, summarizeTool, statePaths, touchFile, isTrackerChangeTool,
-  hasToolContext, isInteractive, readPending, pendingText, removeFile, emitToolContext,
+  hasToolContext, isInteractive, readPending, pendingText, removeFile, emitToolContext, anchorFromTool,
 } from './common.mjs';
 
 runHook(async () => {
@@ -9,7 +9,7 @@ runHook(async () => {
   if (env.AUTO_HISTORY_DISABLE === '1') return;
   const data = await readInput();
   if (!data || !data.session_id) return;
-  const r = resolveAnchor(data, env);
+  const r = resolveAnchor(data, env) || anchorFromTool(data, env); // for tools / agents that send no PreToolUse
   if (!r) return;
   const ms = Number(data.duration_ms);
   const dur = Number.isFinite(ms) && ms >= 0 ? ` (${(ms / 1000).toFixed(1)}s)` : '';

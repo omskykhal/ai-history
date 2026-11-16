@@ -32,7 +32,7 @@ export let AGENT = parseAgent();
 // other tools' settings) is never looked at: every hook builds its `env` with hookEnv() instead of using process.env.
 export const ENV_KEYS = [
   'AUTO_HISTORY_ROOT', 'AUTO_HISTORY_LANG', 'AUTO_HISTORY_DIRNAME', 'AUTO_HISTORY_DISABLE', 'AUTO_HISTORY_NO_BLOCK',
-  'AUTO_HISTORY_SUGGEST_ASK', 'AUTO_HISTORY_CONF_DIR', 'AUTO_HISTORY_STATE_DIR', 'AUTO_HISTORY_KIMI_HOME', 'AUTO_HISTORY_KEEP_DAYS', 'AUTO_HISTORY_ARCHIVE_DAYS', 'AUTO_HISTORY_SESSIONS_DAYS',
+  'AUTO_HISTORY_SUGGEST_ASK', 'AUTO_HISTORY_INJECT', 'AUTO_HISTORY_CONF_DIR', 'AUTO_HISTORY_STATE_DIR', 'AUTO_HISTORY_KIMI_HOME', 'AUTO_HISTORY_KEEP_DAYS', 'AUTO_HISTORY_ARCHIVE_DAYS', 'AUTO_HISTORY_SESSIONS_DAYS',
   'CLAUDE_CODE_ENTRYPOINT', 'CLAUDE_PROJECT_DIR', 'CLAUDE_PLUGIN_ROOT', 'CLAUDE_PLUGIN_DATA', 'CLAUDECODE', 'CLAUDE_CODE_SESSION_ID',
   'CLAUDE_CODE_SESSION_ATTENDED', 'CLAUDE_CODE_CHILD_SESSION', 'AI_AGENT',
 ];
@@ -402,7 +402,22 @@ function safeSid(sid) {
 export function statePaths(sid, env = process.env) {
   const dir = getStateDir(env);
   const s = safeSid(sid);
-  return { dir, json: path.join(dir, `${s}.json`), tool: path.join(dir, `${s}.tool`), tracker: path.join(dir, `${s}.tracker`), ctx: path.join(dir, `${s}.ctx`) };
+  return { dir, json: path.join(dir, `${s}.json`), tool: path.join(dir, `${s}.tool`), tracker: path.join(dir, `${s}.tracker`), ctx: path.join(dir, `${s}.ctx`), idx: path.join(dir, `${s}.idx`) };
+}
+// Marker of a session that has no project yet (0.12.0): { at, prompt, shownAt }. It limits the project list to once per session and carries
+// the prompt over to the log when the first tool path decides the anchor.
+export function readIndexMark(sid, env = process.env) {
+  try {
+    const j = JSON.parse(fs.readFileSync(statePaths(sid, env).idx, 'utf-8'));
+    return j && typeof j === 'object' ? j : null;
+  } catch {
+    return null;
+  }
+}
+export function writeIndexMark(sid, mark, env = process.env) {
+  const p = statePaths(sid, env);
+  fs.mkdirSync(p.dir, { recursive: true });
+  writeAtomic(p.idx, JSON.stringify(mark));
 }
 export function readState(sid, env = process.env) {
   if (!sid) return null;
@@ -660,7 +675,80 @@ export function matchProjectMention(prompt0, projects, folders, aliases) {
   const list = Array.isArray(folders) ? folders : (Array.isArray(projects) ? projects.map((p) => ({ ...p, recorded: true })) : []);
   const fo = matchFolder(prompt, list);
   if (al && fo) return fo.name.length > al.len ? fo : al.hit;
-  return al ? al.hit : fo;
+  if (al || fo) return al ? al.hit : fo;
+  // 0.12.0 fallbacks, projects with history only: the bare name without a keyword, then a misspelt name next to a keyword
+  return matchBareRecorded(prompt, list) || matchFuzzyRecorded(prompt, list);
+}
+
+// A project that has history is matched by its name alone ("shop4office: fix the calendar"), no "project" / "folder" keyword needed.
+// To keep everyday words out: a name with a digit, `-._` or an inner capital, or one of 6+ characters, matches anywhere; a shorter plain word
+// only as the first word of the prompt. Depth-2 folders: names with a digit or symbol only. Korean names: 3+ characters (a particle may follow).
+// Longest name first.
+const BARE_PLAIN_MIN = 6;
+const isDistinctName = (n) => /[0-9._-]/.test(n) || /[a-z][A-Z]/.test(n);
+function matchBareRecorded(prompt, folders) {
+  const sorted = folders.filter((p) => p && p.recorded && typeof p.name === 'string' && p.name.trim())
+    .slice().sort((a, b) => b.name.length - a.name.length);
+  for (const p of sorted) {
+    try {
+      const n = escRe(p.name);
+      if (HANGUL_RE.test(p.name)) {
+        if (p.name.length >= 3 && new RegExp(`(?<![${ALIAS_WORD}])${n}`, 'i').test(prompt)) return { ...p, via: 'bare' };
+        continue;
+      }
+      const distinct = isDistinctName(p.name);
+      if (p.depth === 2 && !distinct) continue;
+      const post = '(?![A-Za-z0-9_-]|[\\\\/.][A-Za-z0-9])'; // not a file name such as "mind.md"
+      const re = distinct || p.name.length >= BARE_PLAIN_MIN
+        ? new RegExp(`(?<![A-Za-z0-9_.-])${n}${post}`, 'i')
+        : new RegExp(`^\\s*${n}${post}`, 'i');
+      if (re.test(prompt)) return { ...p, via: 'bare' };
+    } catch { /* ignore */ }
+  }
+  return null;
+}
+
+// A name next to "project" / "folder" that is off by a letter or two ("lobbyservicec project"). ASCII names of 5+ characters only.
+// Allowed distance: 1 for names of 5-8 characters, 2 for 9+ (one transposition = 1). Only when exactly one folder is the closest.
+// The hit carries `typed` (what the user wrote).
+const FUZZY_NAME_MIN = 5;
+function editDistance(a, b, max) {
+  if (Math.abs(a.length - b.length) > max) return max + 1;
+  const d = [];
+  for (let i = 0; i <= a.length; i++) d.push([i]);
+  for (let j = 1; j <= b.length; j++) d[0][j] = j;
+  for (let i = 1; i <= a.length; i++) {
+    for (let j = 1; j <= b.length; j++) {
+      const c = a[i - 1] === b[j - 1] ? 0 : 1;
+      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + c);
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
+    }
+  }
+  return d[a.length][b.length];
+}
+function matchFuzzyRecorded(prompt, folders) {
+  try {
+    const TOK = '([A-Za-z0-9][A-Za-z0-9._-]{3,})';
+    const found = [];
+    for (const m of prompt.matchAll(new RegExp(`${TOK}${LINK_AFTER_NAME}\\s*(${KW_PF})`, 'gi'))) found.push({ tok: m[1], kw: m[2] });
+    for (const m of prompt.matchAll(new RegExp(`(${KW_PF})${LINK_AFTER_KW}\\s+${TOK}`, 'gi'))) found.push({ tok: m[2], kw: m[1] });
+    const pool = folders.filter((p) => p && p.recorded && typeof p.name === 'string' && p.name.length >= FUZZY_NAME_MIN && /^[A-Za-z0-9._ -]+$/.test(p.name));
+    for (const { tok, kw } of found) {
+      const typed = tok.replace(/[._-]+$/, '');
+      const s = typed.toLowerCase();
+      const projectKw = KW_PROJECT.some((w) => w.toLowerCase() === kw.toLowerCase());
+      let best = null; let bestD = 99; let tie = false;
+      for (const p of pool) {
+        if (p.depth === 2 && !projectKw) continue;
+        const max = p.name.length >= 9 ? 2 : 1;
+        const dist = editDistance(s, p.name.toLowerCase(), max);
+        if (dist < 1 || dist > max) continue;
+        if (dist < bestD) { best = p; bestD = dist; tie = false; } else if (dist === bestD && p.anchor !== best.anchor) tie = true;
+      }
+      if (best && !tie) return { ...best, via: 'fuzzy', typed };
+    }
+  } catch { /* ignore */ }
+  return null;
 }
 
 // Absolute path in the prompt → project. Called only when matchProjectMention found no name.
@@ -672,6 +760,16 @@ export function matchProjectMention(prompt0, projects, folders, aliases) {
 // exact = the path is that folder itself. A path inside a folder (exact=false) is used by the caller only when the session has no anchor yet,
 // so a file path given for reference does not move the anchor.
 const PATH_TOKEN_RE = /(?<![^\s"'`(\[:<{>=])(?:[A-Za-z]:[\\/]|\/)[^\s"'`<>|]+/g;
+// One path → the candidate folder that holds it (the "Target" rule above). null when outside the root or outside every candidate.
+export function projectOfPath(cand, folders, env = process.env) {
+  if (!cand || !Array.isArray(folders) || !inScope(cand, env)) return null;
+  const n = normalizeWinPath(cand);
+  const holders = folders.filter((f) => f && f.anchor && isUnder(n, f.anchor));
+  if (!holders.length) return null;
+  const rec = holders.filter((f) => f.recorded).sort((a, b) => b.depth - a.depth)[0];
+  const f = rec || holders.find((x) => x.anchor === n) || holders.find((x) => x.depth === 1) || holders[0];
+  return { name: f.name, dir: f.dir, anchor: f.anchor, depth: f.depth, recorded: f.recorded, exact: f.anchor === n };
+}
 export function matchProjectPath(prompt0, folders, env = process.env) {
   if (typeof prompt0 !== 'string' || !prompt0.trim() || NOISE_RE.test(prompt0) || !Array.isArray(folders)) return null;
   let s = prompt0.replace(/<pasted_content[\s\S]*?(?:<\/pasted_content>|$)/gi, ' ');
@@ -679,15 +777,7 @@ export function matchProjectPath(prompt0, folders, env = process.env) {
   if (noise) s = s.slice(0, noise.index);
   s = s.replace(/```[\s\S]*?(?:```|$)/g, ' ').replace(/https?:\/\/\S+/gi, ' ').replace(/www\.\S+/gi, ' ');
   if (s.length > MENTION_SCAN_MAX) s = s.slice(0, MENTION_SCAN_MAX).replace(/\S+$/, '');
-  const resolve = (cand) => {
-    if (!cand || !inScope(cand, env)) return null;
-    const n = normalizeWinPath(cand);
-    const holders = folders.filter((f) => f && f.anchor && isUnder(n, f.anchor));
-    if (!holders.length) return null;
-    const rec = holders.filter((f) => f.recorded).sort((a, b) => b.depth - a.depth)[0];
-    const f = rec || holders.find((x) => x.anchor === n) || holders.find((x) => x.depth === 1) || holders[0];
-    return { name: f.name, dir: f.dir, anchor: f.anchor, depth: f.depth, recorded: f.recorded, exact: f.anchor === n };
-  };
+  const resolve = (cand) => projectOfPath(cand, folders, env);
   let inside = null;
   for (const m of s.matchAll(PATH_TOKEN_RE)) {
     const tok = m[0].replace(/[.,;:!?)\]}]+$/, '');
@@ -706,10 +796,59 @@ export function hasAnchorSource(data, env = process.env) {
   return !!(st && st.anchor && inScope(st.anchor, env)) || !!(data && inScope(data.cwd, env));
 }
 
+// Project list for a session that has no project yet (0.12.0): projects with history, most recently updated STATUS first, at most `max`.
+// Line = "- name — path — Last worker …".
+export function projectIndexLines(env = process.env, max = injectLimits(env).index) {
+  try {
+    const items = listHistoryProjects(env).map((p) => {
+      let m = 0;
+      try { m = fs.statSync(path.join(historyDir(p.dir, env), 'STATUS.md')).mtimeMs; } catch { /* ignore */ }
+      return { ...p, m };
+    }).sort((a, b) => b.m - a.m).slice(0, Math.max(0, max));
+    return items.map((p) => { const lw = lastWorkerLine(p.dir, env); return `- ${p.name} — ${p.dir}${lw ? ` — ${lw}` : ''}`; });
+  } catch {
+    return [];
+  }
+}
+
+// A session without a project (marker present) that first touches a path inside a project with a tool gets that project as its anchor
+// (shared by pre-tool and post-tool). A file-path input is used as is; a shell command is searched for absolute paths. The prompt kept in
+// the marker becomes the [User] line and the marker is removed. null when nothing can be decided.
+export function anchorFromTool(data, env = process.env) {
+  try {
+    if (!data || !data.session_id || data.agent_id) return null;
+    const mark = readIndexMark(data.session_id, env);
+    if (!mark) return null;
+    if (injectLimits(env).index === 0) return null; // a marker left from before the switch-off is ignored
+    const ti = data.tool_input && typeof data.tool_input === 'object' ? data.tool_input : {};
+    const fp = toolFilePath(ti);
+    const cmd = typeof ti.command === 'string' ? ti.command : '';
+    if (!cmd && !(fp && inScope(fp, env))) return null; // no folder scan for a path outside the root or a tool without a path
+    const folders = listCandidateFolders(env);
+    let hit = fp ? projectOfPath(fp, folders, env) : null;
+    if (!hit && cmd) hit = matchProjectPath(cmd, folders, env);
+    if (!hit) return null;
+    // a folder without history only for an editing tool or a shell command, so reading a file for reference does not start a history there
+    const name = String(data.tool_name || '');
+    if (hit.recorded === false && !EDIT_TOOLS.includes(name) && !SHELL_TOOLS.includes(name)) return null;
+    // only the hook that claims the marker decides the anchor; a hook running in parallel follows it
+    try { fs.unlinkSync(statePaths(data.session_id, env).idx); } catch { return resolveAnchor(data, env); }
+    const r = resolveAnchor(data, env, { allowSwitch: true, mentioned: hit.dir, unrecorded: hit.recorded === false });
+    if (!r || !r.state) return null;
+    if (mark.prompt) appendLog(r.anchor, data, `[User] ${mark.prompt}`, env);
+    const st = { ...r.state, promptAt: r.state.promptAt || mark.at || new Date().toISOString() };
+    try { writeState(data.session_id, st, env); } catch (e) { warn(e.message); }
+    return { ...r, state: st };
+  } catch {
+    return null;
+  }
+}
+
 // Injection sizes (design A, 0.10.0): the session-start / mention reader is an index — STATUS first, log tails short — and the rest is read on demand
 // (search.mjs or the dated files). Defaults: today 15 lines, yesterday 5 lines, 200 chars per log line, 8,000 chars in total, STATUS 4,000 chars.
 // Override with <ConfDir>/INJECT (one key=value per line) or AUTO_HISTORY_INJECT ("today=15,yday=5,line=200,total=8000,status=4000"); env wins.
-export const INJECT_DEFAULTS = { today: 15, yday: 5, line: 200, total: 8000, status: 4000 };
+// index (0.12.0) = lines of the project list shown to a session that has no project yet; 0 turns the list and the tool-path anchor off.
+export const INJECT_DEFAULTS = { today: 15, yday: 5, line: 200, total: 8000, status: 4000, index: 15 };
 const INJECT_KEYS = Object.keys(INJECT_DEFAULTS);
 function parseInjectPairs(text) {
   const out = {};
@@ -725,7 +864,7 @@ export function injectLimits(env = process.env) {
   const fromFile = parseInjectPairs((readListFile(path.join(getConfDir(env), 'INJECT')) || []).join('\n'));
   const fromEnv = parseInjectPairs(env.AUTO_HISTORY_INJECT);
   const lim = { ...INJECT_DEFAULTS, ...fromFile, ...fromEnv };
-  for (const k of INJECT_KEYS) if (!Number.isFinite(lim[k]) || lim[k] < 1) lim[k] = INJECT_DEFAULTS[k];
+  for (const k of INJECT_KEYS) if (!Number.isFinite(lim[k]) || lim[k] < (k === 'index' ? 0 : 1)) lim[k] = INJECT_DEFAULTS[k];
   return lim;
 }
 export function readerTotalMax(env = process.env) { return injectLimits(env).total; }

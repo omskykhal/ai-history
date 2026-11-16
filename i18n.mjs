@@ -51,6 +51,13 @@ const STR = {
       + '첫 줄 `[현황]`으로 3~8줄 보고 후 이번 요청을 수행하라. `마지막 작업자` 줄이 있으면 `[현황]` 첫 줄에 마지막 작업자와 시각을 포함하라. '
       + `이 프로젝트 작업은 \`${dir}\` 기준으로 하라. 미완료 작업은 지시 없이 재개하지 마라. `
       + (ask === 'off' ? KO_NO_ASK_START : KO_ASK_START),
+    mentionFuzzy: (typed, name) => `[ai-history] 요청문의 \`${typed}\` 는 철자가 가장 가까운 \`${name}\` 프로젝트로 해석했다. \`[현황]\` 첫머리에 이 해석을 한 줄로 알리고, 다른 프로젝트였다면 사용자에게 확인하라.`,
+    noProjectIndex: (dirname, lines, searchCmd, instruction) => '[ai-history] 이 세션은 아직 기록 기준 프로젝트가 정해지지 않았다. 아래는 기록이 있는 프로젝트다(최근 순). '
+      + '이번 요청이 이 중 하나에 관한 것이면(이름을 조금 다르게 썼거나, 이름 없이 "하던 작업"이라고만 했어도) '
+      + `그 폴더의 \`${dirname}/STATUS.md\` 를 먼저 읽고 첫 줄 \`[현황]\`으로 3~8줄 보고한 뒤 요청을 수행하라. `
+      + '어느 프로젝트인지 가릴 수 없으면 추측하지 말고 사용자에게 물어라. 프로젝트와 무관한 요청이면 이 목록을 무시하라. '
+      + '그 폴더 안 파일을 도구로 읽거나 고치는 순간부터 그 프로젝트에 기록된다. 미완료 작업은 지시 없이 재개하지 마라.\n'
+      + `${lines.join('\n')}\n낱말로 찾기: ${searchCmd}\n\n프로젝트 작업을 시작한 뒤에는 다음을 따른다.\n${instruction}`,
     blockReason: (fmt) => `[ai-history] 이번 응답에 상태 블록이 없습니다. 아래 형식의 블록만 출력하고 종료하세요:\n${fmt}`,
     sessionStatusReminder: (fmt) => `[ai-history] 도구를 1건 이상 사용한 응답은 맨 끝에 아래 블록을 그대로 출력하라. 각 제목 아래 1~5줄, 한국어, 확인된 사실만.\n${fmt}`,
     readerDelivered: '이 기록을 방금 전달받았다. 위 지시대로 `[현황]`을 보고하라.',
@@ -227,6 +234,13 @@ const STR = {
       + 'Start with `[Status]` and report in 3-8 lines, then carry out the request. If a `Last worker` line is present, include the last worker and time in the first `[Status]` line. '
       + `Work on this project relative to \`${dir}\`. Do not resume unfinished work without an instruction. `
       + (ask === 'off' ? EN_NO_ASK_START : EN_ASK_START),
+    mentionFuzzy: (typed, name) => `[ai-history] \`${typed}\` in the request was read as the project \`${name}\`, the closest spelling. Say so in one line at the top of \`[Status]\`, and check with the user if another project was meant.`,
+    noProjectIndex: (dirname, lines, searchCmd, instruction) => '[ai-history] This session has no project for its history yet. Below are the projects that have history (most recent first). '
+      + 'If this request is about one of them (even with the name spelt a little differently, or with no name at all, as in "what I was working on"), '
+      + `read \`${dirname}/STATUS.md\` in that folder first, start with \`[Status]\` and report in 3-8 lines, then carry out the request. `
+      + 'If you cannot tell which project is meant, do not guess: ask the user. If the request is not about a project, ignore this list. '
+      + 'Recording to a project starts the moment you read or change a file inside its folder with a tool. Do not resume unfinished work without an instruction.\n'
+      + `${lines.join('\n')}\nSearch by word: ${searchCmd}\n\nOnce you are working on a project, follow this.\n${instruction}`,
     blockReason: (fmt) => `[ai-history] This reply has no status block. Output only a block in the format below and stop:\n${fmt}`,
     sessionStatusReminder: (fmt) => `[ai-history] Any reply in which you used at least one tool must END with the block below, verbatim. 1-5 lines under each heading, verified facts only.\n${fmt}`,
     readerDelivered: 'You just received this record. Report `[Status]` as instructed above.',

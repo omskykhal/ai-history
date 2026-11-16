@@ -142,6 +142,8 @@ const AC2 = /^# STATUS\n세션: [0-9a-f]{8}\n작성: claude \([0-9a-f]{8}\)\n갱
 const hasAll4 = (s) => ['하던 일', '한 일', '다음 할 일', '진행도'].every((h) => new RegExp(`^## ${h}$`, 'm').test(s));
 const BLOCK_RE = /^\{"decision":"block","reason":"\[ai-history\]/;
 // OS branch (0.10.1): the hooks run on Windows and Linux; cases whose expectations are Windows paths get a POSIX twin so the suite passes on both.
+// 기준 프로젝트를 못 정한 요청의 출력: 없음 또는 프로젝트 목록 안내(0.12.0)
+const noAnchorOut = (out) => out === '' || /기록 기준 프로젝트가 정해지지 않았다/.test(out);
 const IS_WIN = process.platform === 'win32';
 const WP = (win, posix) => (IS_WIN ? win : posix);
 
@@ -640,7 +642,7 @@ async function main() {
     }
     // (g) policyholder ≠ policy, 미래세상 부분 매칭
     {
-      const got = [m('policyholder 프로젝트 정리'), m('policy 프로젝트 정리'), m('미래세상 프로젝트에서 이어서'), m('MyMemo 폴더를 이어서'), m('mymemo 프로젝트 이어서'), m('xMyMemo 프로젝트 이어서')].map(String);
+      const got = [m('policyholder 프로젝트 정리'), m('policy 프로젝트 정리'), m('미래세상 프로젝트에서 이어서'), m('MyMemo 폴더를 이어서'), m('mymemo 프로젝트 이어서'), m('xxxMyMemo 프로젝트 이어서')].map(String);
       const want = ['null', 'policy', '미래세상', 'MyMemo', 'MyMemo', 'null'];
       rec(7, '(g) 단어 경계·한글 부분', want.join(','), got.join(','), got.join(',') === want.join(','));
     }
@@ -750,7 +752,7 @@ async function main() {
       {
         const { sid, r } = promptAt('teacher 봐줘');
         rec(7, '(q) "teacher 봐줘"(키워드 없음)', '매칭 없음·앵커 불변(상태 없음)', `anchor=${anchorOf(sid)} out='${r.out.slice(0, 40)}' m=${m2('teacher 봐줘')}`,
-          m2('teacher 봐줘') === null && !anchorOf(sid) && r.out === '');
+          m2('teacher 봐줘') === null && !anchorOf(sid) && noAnchorOut(r.out));
       }
       // (r)
       {
@@ -762,14 +764,14 @@ async function main() {
       // (s)
       {
         const { sid, ctx } = promptAt('MyMemo 프로젝트 이어서 해줘');
-        rec(7, '(s) 기록 있는 폴더도 키워드 필요(통일)', `"MyMemo 프로젝트"→anchor=${N('MyMemo')}·주입 STATUS(MYMEMO_MARK); "MyMemo 이어서"=null`, `anchor=${anchorOf(sid)} mark=${/MYMEMO_MARK/.test(ctx)} m=${m2('MyMemo 이어서')}`,
-          anchorOf(sid) === N('MyMemo') && /MYMEMO_MARK/.test(ctx) && m2('MyMemo 이어서') === null && m2('MyMemo 프로젝트 이어서') === 'MyMemo');
+        rec(7, '(s) 기록 있는 폴더: 키워드 있으면 주입, 이름만 써도 지정(0.12.0)', `"MyMemo 프로젝트"→anchor=${N('MyMemo')}·주입 STATUS(MYMEMO_MARK); "MyMemo 이어서"=MyMemo`, `anchor=${anchorOf(sid)} mark=${/MYMEMO_MARK/.test(ctx)} m=${m2('MyMemo 이어서')}`,
+          anchorOf(sid) === N('MyMemo') && /MYMEMO_MARK/.test(ctx) && m2('MyMemo 이어서') === 'MyMemo' && m2('MyMemo 프로젝트 이어서') === 'MyMemo');
       }
       // (t)
       {
         const { sid, r } = promptAt('지도(map) 문서 정리해줘');
         rec(7, '(t) 흔한 단어 폴더(map, 기록 없음) + 일상 문장', '매칭 없음', `m=${m2('지도(map) 문서 정리해줘')} anchor=${anchorOf(sid)} out='${r.out.slice(0, 30)}'`,
-          m2('지도(map) 문서 정리해줘') === null && !anchorOf(sid) && r.out === '' && m2('map 폴더 열어줘') === 'map');
+          m2('지도(map) 문서 정리해줘') === null && !anchorOf(sid) && noAnchorOut(r.out) && m2('map 폴더 열어줘') === 'map');
       }
       // (u)
       {
@@ -843,14 +845,14 @@ async function main() {
       const { sid: sid2 } = promptAt('tauko 프로젝트 봐줘', { AUTO_HISTORY_CONF_DIR: CONF });
       rec(7, '(ab) ALIASES 없음 → 별칭 없이 키워드 규칙만', 'aliases=[]·"play …" 무매칭(상태 없음·무출력)·"tauko 프로젝트"=깊이2 tauko',
         `aliases=${noAl.length} anchor1=${anchorOf(sid)} out='${r.out.slice(0, 30)}' anchor2=${anchorOf(sid2)}`,
-        Array.isArray(noAl) && noAl.length === 0 && !anchorOf(sid) && r.out === '' && anchorOf(sid2) === N(TK));
+        Array.isArray(noAl) && noAl.length === 0 && !anchorOf(sid) && noAnchorOut(r.out) && anchorOf(sid2) === N(TK));
     }
     // (ac)
     {
       const ghost = aliases.filter((x) => /ghost|유령/.test(x.phrase));
       const { sid, r } = promptAt('ghostword 확인해줘');
       rec(7, '(ac) 존재하지 않는 경로/오류 줄 → 무시', 'ghost 별칭 0개·무매칭·stderr 비어 있음', `ghost=${ghost.length} anchor=${anchorOf(sid)} out='${r.out.slice(0, 30)}' err='${r.err.slice(0, 40)}'`,
-        ghost.length === 0 && !anchorOf(sid) && r.out === '' && r.err === '' && aliases.length > 0);
+        ghost.length === 0 && !anchorOf(sid) && noAnchorOut(r.out) && r.err === '' && aliases.length > 0);
     }
     // (ad)
     {
@@ -872,7 +874,7 @@ async function main() {
         m3('_auto_history_test 프로젝트 최근에') === R(AT) && anchorOf(sao) === N(AT));
       const { sid: sap, r: rap } = promptAt('autohistory 테스트');
       rec(7, '(ap) "autohistory 테스트" → 매칭 없음', '무매칭·상태 없음·무출력', `m=${m3('autohistory 테스트')} anchor=${anchorOf(sap)} out='${rap.out.slice(0, 30)}'`,
-        m3('autohistory 테스트') === null && !anchorOf(sap) && rap.out === '');
+        m3('autohistory 테스트') === null && !anchorOf(sap) && noAnchorOut(rap.out));
       const aqs = ['auto-history 이어서', 'auto history 이어서', '오토히스토리 봐줘'];
       rec(7, '(aq) auto-history / auto history / 오토히스토리 → auto-history', `3건 모두 ${R(AH)}`, aqs.map((x) => m3(x)).join(','),
         aqs.every((x) => m3(x) === R(AH)));
@@ -2240,6 +2242,92 @@ async function row15() {
     const third = ls.some((l) => /세 번째는 생략/.test(l) && /\[exit\]/.test(l));
     const ok = iW1 >= 0 && iW2 === iW1 + 1 && iN === iW2 + 1 && iX === iN + 1 && !third;
     rec(15, '(m) 종료 요약 줄', '하던 일 2줄(최대 2)·다음 할 일 1줄이 순서대로, 바로 다음 줄이 [exit] 종료…재개', `idx=${iW1},${iW2},${iN},${iX} third=${third}`, ok);
+  }
+  // (n) 기록 있는 프로젝트는 키워드 없이 이름만으로(0.12.0): 숫자·기호·6자 이상은 어디서든, 짧은 낱말은 첫 낱말만, 깊이 2 낱말·기록 없음·파일 이름 제외
+  const rf = [
+    { name: 'shop4office', depth: 1, recorded: true, anchor: 'r1' }, { name: 'mind', depth: 1, recorded: true, anchor: 'r2' },
+    { name: 'docs', depth: 2, recorded: true, anchor: 'r3' }, { name: 'lobbyservice', depth: 1, recorded: true, anchor: 'r4' },
+    { name: 'policy', depth: 1, recorded: false, anchor: 'r5' }, { name: 'acme.work', depth: 2, recorded: true, anchor: 'r6' },
+    { name: '과일상점', depth: 1, recorded: true, anchor: 'r7' }, { name: 'alpha1x', depth: 1, recorded: true, anchor: 'r8' }, { name: 'alpha2x', depth: 1, recorded: true, anchor: 'r9' },
+  ];
+  const mh = (s) => C.matchProjectMention(s, [], rf, []);
+  const mn = (s) => { const h = mh(s); return h ? h.name : null; };
+  {
+    const got = [mn('shop4office 에서, 공급사 캘린더에 취소건은'), mn('mind 감정 작업 하다가 다운됐어'), mn('어제 멈춘 작업 mind 관련된거'), mn('docs 정리해줘'), mn('lobbyservice 수정좀 하자'),
+      mn('policy 수정해줘'), mn('오늘은 acme.work 배포하자'), mn('mind.md 파일 열어줘'), mn('과일상점에서 주문 화면'), mn('xshop4office 는 다른 것'), mn('shop4office/index.js 열어줘')].map(String);
+    const want = ['shop4office', 'mind', 'null', 'null', 'lobbyservice', 'null', 'acme.work', 'null', '과일상점', 'null', 'null'];
+    rec(15, '(n) 기록 있는 이름은 키워드 없이', want.join(','), got.join(','), got.join(',') === want.join(',') && mh('lobbyservice 수정').via === 'bare');
+  }
+  // (o) 키워드 붙은 오타 이름: 거리 1(5~8자)·2(9자 이상), 유일할 때만, 기록 있는 영문·숫자 이름만, 깊이 2 는 "프로젝트" 키워드만
+  {
+    const h1 = mh('lobbyservicec 프로젝트 수정좀 하자');
+    const got = [h1 ? `${h1.name}/${h1.via}/${h1.typed}` : null, mn('shop4ofice project'), mn('project called shp4office'), mn('minds 프로젝트'), mn('policz 프로젝트'),
+      mn('alpha3x 프로젝트'), mn('lobbyserv 프로젝트'), mn('acme.wrk 폴더'), mn('acme.wrk 프로젝트'), mn('shop4offcie 라는 프로젝트')].map(String);
+    const want = ['lobbyservice/fuzzy/lobbyservicec', 'shop4office', 'shop4office', 'null', 'null', 'null', 'null', 'null', 'acme.work', 'shop4office'];
+    rec(15, '(o) 오타 이름 허용', want.join(','), got.join(','), got.join(',') === want.join(','));
+  }
+  // (p) 기준 프로젝트 없는 세션: 목록 안내 1회·표지·첫 도구 경로로 앵커·요청문 이월·index=0 끔
+  {
+    const a = P('p13p'); fs.mkdirSync(path.join(a, HD), { recursive: true });
+    fs.writeFileSync(path.join(a, HD, 'STATUS.md'), '# STATUS\n세션: abcdef12\n작성: codex (abcdef12)\n갱신: 2026-11-16 09:00:00\n앵커: x\n\n## 하던 일\n- 목록 표지\n');
+    const b = P('p13p2'); fs.mkdirSync(b, { recursive: true });
+    const fz = P('p13fuzzy'); fs.mkdirSync(path.join(fz, HD), { recursive: true }); fs.writeFileSync(path.join(fz, HD, 'STATUS.md'), '# STATUS\n세션: abcdef12\n\n## 하던 일\n- 오타 표지\n');
+    const ctxOf = (out) => { try { return JSON.parse(out).hookSpecificOutput.additionalContext || ''; } catch { return ''; } };
+    const idxFile = (sid) => path.join(STATE, `${sid}.idx`);
+    const s1 = sidNew();
+    const r1 = run('prompt-submit.mjs', { session_id: s1, cwd: OUTSIDE, prompt: '마지막으로 작업했던거 체크해줘' }, baseEnv(s1));
+    const c1 = ctxOf(r1.out);
+    const ok1 = c1.includes('기록 기준 프로젝트가 정해지지 않았다') && c1.includes(`- p13p — ${a} — 마지막 작업자: codex · 갱신 2026-11-16 09:00:00`)
+      && c1.includes('--all') && c1.includes('STATUS:BEGIN') && (c1.match(/^- .+ — /gm) || []).length <= 15 && fs.existsSync(idxFile(s1)) && !fs.existsSync(stateFile(s1));
+    const r2 = run('prompt-submit.mjs', { session_id: s1, cwd: OUTSIDE, prompt: '그거 이어서 해줘' }, baseEnv(s1));
+    const ok2 = r2.out === '' && (readJson(idxFile(s1)) || {}).prompt === '그거 이어서 해줘';
+    const before = logOf(a);
+    run('pre-tool.mjs', { session_id: s1, cwd: OUTSIDE, tool_name: 'Read', tool_input: { file_path: path.join(a, 'src', 'x.txt') } }, baseEnv(s1));
+    run('post-tool.mjs', { session_id: s1, cwd: OUTSIDE, tool_name: 'Read', tool_input: { file_path: path.join(a, 'src', 'x.txt') } }, baseEnv(s1));
+    const added = logOf(a).slice(before.length);
+    const st = readJson(stateFile(s1)) || {};
+    const ok3 = /\[anchor\] 지정 /.test(added) && (added.match(/\[User\] 그거 이어서 해줘/g) || []).length === 1 && /▶ \[Read\]/.test(added) && /✓ \[Read\]/.test(added)
+      && !fs.existsSync(idxFile(s1)) && st.anchor === C.normalizeWinPath(a) && !!st.promptAt && fs.existsSync(toolFile(s1));
+    // 셸 명령 속 경로(기록 없는 폴더)로도 앵커, 서브에이전트·표지 없는 세션은 앵커하지 않음
+    const s2 = sidNew();
+    run('prompt-submit.mjs', { session_id: s2, cwd: OUTSIDE, prompt: '새로 만든 거 봐줘' }, baseEnv(s2));
+    run('pre-tool.mjs', { session_id: s2, cwd: OUTSIDE, agent_id: 'sub1', tool_name: 'Bash', tool_input: { command: `cd "${b}" && ls` } }, baseEnv(s2));
+    const subNo = !fs.existsSync(stateFile(s2));
+    run('pre-tool.mjs', { session_id: s2, cwd: OUTSIDE, tool_name: 'Bash', tool_input: { command: `cd "${b.replace(/\\/g, '/')}" && ls` } }, baseEnv(s2));
+    const s3 = sidNew();
+    run('pre-tool.mjs', { session_id: s3, cwd: OUTSIDE, tool_name: 'Read', tool_input: { file_path: path.join(a, 'y.txt') } }, baseEnv(s3));
+    const ok4 = subNo && (readJson(stateFile(s2)) || {}).anchor === C.normalizeWinPath(b) && /\[User\] 새로 만든 거 봐줘/.test(logOf(b)) && !fs.existsSync(stateFile(s3));
+    // index=0 → 안내·표지 없음 / 이름을 쓴 요청은 종전대로 바로 앵커되고 표지를 남기지 않음
+    const s4 = sidNew();
+    const r4 = run('prompt-submit.mjs', { session_id: s4, cwd: OUTSIDE, prompt: '하던 거 뭐였지' }, baseEnv(s4, { AUTO_HISTORY_INJECT: 'index=0' }));
+    const s5 = sidNew();
+    const r5 = run('prompt-submit.mjs', { session_id: s5, cwd: OUTSIDE, prompt: 'p13fuzy 프로젝트 이어서' }, baseEnv(s5));
+    const c5 = ctxOf(r5.out);
+    const ok5 = r4.out === '' && !fs.existsSync(idxFile(s4)) && C.injectLimits({ AUTO_HISTORY_INJECT: 'index=0' }).index === 0 && C.injectLimits({}).index === 15
+      && c5.includes('`p13fuzy` 는 철자가 가장 가까운 `p13fuzzy` 프로젝트로 해석') && c5.includes('오타 표지') && !fs.existsSync(idxFile(s5));
+    // (q) 리뷰 반영: 기준이 이미 있는 세션은 이름만·오타로 바뀌지 않음(키워드는 바뀜) / 기록 없는 폴더는 읽기 도구로 앵커하지 않음(편집은 앵커)
+    {
+      const home = P('p13q-home'); const sA = startSession(home);
+      run('prompt-submit.mjs', { session_id: sA, cwd: home, prompt: 'p13fuzzy 화면 수정해줘' }, baseEnv(sA));
+      const keepBare = (readJson(stateFile(sA)) || {}).anchor === C.normalizeWinPath(home);
+      run('prompt-submit.mjs', { session_id: sA, cwd: home, prompt: 'p13fuzy 프로젝트 수정해줘' }, baseEnv(sA));
+      const keepFuzzy = (readJson(stateFile(sA)) || {}).anchor === C.normalizeWinPath(home);
+      run('prompt-submit.mjs', { session_id: sA, cwd: home, prompt: 'p13fuzzy 프로젝트 수정해줘' }, baseEnv(sA));
+      const kwSwitch = (readJson(stateFile(sA)) || {}).anchor === C.normalizeWinPath(fz);
+      const un = P('p13q-new'); fs.mkdirSync(un, { recursive: true });
+      const sB = sidNew();
+      run('prompt-submit.mjs', { session_id: sB, cwd: OUTSIDE, prompt: '참고 파일 좀 봐줘' }, baseEnv(sB));
+      run('pre-tool.mjs', { session_id: sB, cwd: OUTSIDE, tool_name: 'Read', tool_input: { file_path: path.join(un, 'a.txt') } }, baseEnv(sB));
+      const readNo = !fs.existsSync(stateFile(sB)) && fs.existsSync(idxFile(sB)) && !fs.existsSync(path.join(un, HD));
+      run('pre-tool.mjs', { session_id: sB, cwd: OUTSIDE, tool_name: 'Read', tool_input: { file_path: path.join(a, 'z.txt') } }, baseEnv(sB, { AUTO_HISTORY_INJECT: 'index=0' }));
+      const offNo = !fs.existsSync(stateFile(sB));
+      run('pre-tool.mjs', { session_id: sB, cwd: OUTSIDE, tool_name: 'Edit', tool_input: { file_path: path.join(un, 'a.txt') } }, baseEnv(sB));
+      const editYes = (readJson(stateFile(sB)) || {}).anchor === C.normalizeWinPath(un) && !fs.existsSync(idxFile(sB));
+      rec(15, '(q) 기준 있는 세션 보호·기록 없는 폴더 읽기 제외', '이름만 유지·오타 유지·키워드는 전환 / Read 미앵커·index=0 미앵커·Edit 앵커',
+        `bare=${keepBare} fuzzy=${keepFuzzy} kw=${kwSwitch} read=${readNo} off=${offNo} edit=${editYes}`, keepBare && keepFuzzy && kwSwitch && readNo && offNo && editYes);
+    }
+    rec(15, '(p) 기준 없는 세션: 목록 안내·도구 경로 앵커', '안내 1회(목록 줄·검색·STATUS 지시)+표지 / 둘째 무출력·요청문 갱신 / Read 경로로 앵커·[User] 1회 이월·표지 삭제 / 셸 경로·서브에이전트 제외·표지 없으면 미앵커 / index=0 끔·오타 해석 문구',
+      `show=${ok1} second=${ok2} anchor=${ok3} shell=${ok4} off=${ok5}`, ok1 && ok2 && ok3 && ok4 && ok5);
   }
   // (g) 기존 1~14행 전부 통과
   {

@@ -41,6 +41,7 @@ runHook(async () => {
     removeFile(sp.tool);
     removeFile(sp.tracker);
     removeFile(sp.ctx);
+    removeFile(sp.idx); // a resumed session is shown the project list again
     return;
   }
 
