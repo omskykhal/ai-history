@@ -2,7 +2,7 @@
 
 ## 0.13.0 — 2026-11-17
 
-Antigravity CLI (`agy`) support. Measured on agy 1.5.9, Windows: all six of its hook events fire from both the workspace `.agents/hooks.json` and the global `~/.gemini/config/hooks.json`, injected system messages are followed by the model, and a `Stop` hook can continue the turn.
+Antigravity CLI (`agy`) support. Measured on agy 1.5.9, Windows: all six of its hook events fire from a workspace `.agents/hooks.json`, the four that ai-history registers also fire from the global `~/.gemini/config/hooks.json`, injected system messages are followed by the model, and a `Stop` hook can continue the turn.
 
 - **`node install.mjs --agy-hooks`** adds one key, `ai-history`, to `~/.gemini/config/hooks.json` with four handlers (`--agent agy`); other keys are kept and a backup is written when the file existed. `--agy-hooks-remove` deletes only that key. `--agy-file <path>` overrides the location.
 - Event mapping: `SessionStart` → earlier history and `[Status]`; `PreInvocation` → prompt log, project match, STATUS instruction; `PostToolUse` → tool log; `Stop` → STATUS save and the one-time nudge. Context goes in as `injectSteps` with a `systemMessage`; the nudge is `decision: "continue"` with the request as `reason`.
